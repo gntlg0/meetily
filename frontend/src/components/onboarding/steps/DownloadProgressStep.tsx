@@ -8,8 +8,14 @@ import { useOnboarding } from '@/contexts/OnboardingContext';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSummaryModelSizeLabel, getSummaryModelSizeMb } from '@/lib/onboarding-summary-model';
+import { DEFAULT_TRANSCRIPTION_PROVIDER, MODEL_DEFAULTS } from '@/constants/modelDefaults';
 
 const PARAKEET_MODEL = 'parakeet-tdt-0.6b-v3-int8';
+
+// This build may default to local Whisper (e.g. the Mongolian model); in that
+// case onboarding must not download or wait for the English-only Parakeet.
+const USES_PARAKEET = (DEFAULT_TRANSCRIPTION_PROVIDER as string) === 'parakeet';
+const DEFAULT_WHISPER = MODEL_DEFAULTS[DEFAULT_TRANSCRIPTION_PROVIDER];
 
 type DownloadStatus = 'waiting' | 'downloading' | 'completed' | 'error';
 
@@ -52,6 +58,18 @@ export function DownloadProgressStep() {
     totalMb: 0,
     speedMbps: 0,
   });
+
+  // Local-Whisper default: the model is converted/installed manually, so we only
+  // verify its presence instead of downloading anything.
+  const [whisperState, setWhisperState] = useState<DownloadState>({
+    status: 'waiting',
+    progress: 0,
+    downloadedMb: 0,
+    totalMb: 0,
+    speedMbps: 0,
+  });
+  const [whisperReady, setWhisperReady] = useState(false);
+  const transcriptionReady = USES_PARAKEET ? parakeetDownloaded : whisperReady;
 
   const [isCompleting, setIsCompleting] = useState(false);
   const parakeetDownloadStartedRef = useRef(false);
@@ -168,6 +186,36 @@ export function DownloadProgressStep() {
   useEffect(() => {
     if (parakeetDownloadStartedRef.current) return;
     parakeetDownloadStartedRef.current = true;
+
+    if (!USES_PARAKEET) {
+      // Local Whisper default: just verify the model file is installed.
+      (async () => {
+        try {
+          const models = await invoke<any[]>('whisper_get_available_models');
+          const configured = models.find((m) => m.name === DEFAULT_WHISPER);
+          if (configured && configured.status === 'Available') {
+            setWhisperReady(true);
+            setWhisperState((prev) => ({
+              ...prev,
+              status: 'completed',
+              progress: 100,
+              totalMb: configured.size_mb ?? prev.totalMb,
+              downloadedMb: configured.size_mb ?? prev.downloadedMb,
+            }));
+          } else {
+            setWhisperState((prev) => ({
+              ...prev,
+              status: 'error',
+              error: `Model '${DEFAULT_WHISPER}' is not installed. Run scripts/convert_mongolian_model.sh and copy the .bin into the models directory (see NOTES-MN.md), then restart the app.`,
+            }));
+          }
+        } catch (error) {
+          console.error('Failed to check Whisper model availability:', error);
+          setWhisperState((prev) => ({ ...prev, status: 'error', error: String(error) }));
+        }
+      })();
+      return;
+    }
 
     if (!parakeetDownloaded) {
       setParakeetState((prev) => ({ ...prev, status: 'downloading' }));
@@ -330,30 +378,32 @@ export function DownloadProgressStep() {
 
   const handleContinue = async () => {
     // Verify actual model availability (catches state drift)
-    try {
-      await invoke('parakeet_init');
-      const actuallyAvailable = await invoke<boolean>('parakeet_has_available_models');
+    if (USES_PARAKEET) {
+      try {
+        await invoke('parakeet_init');
+        const actuallyAvailable = await invoke<boolean>('parakeet_has_available_models');
 
-      if (actuallyAvailable && !parakeetDownloaded) {
-        console.log('[DownloadProgressStep] Model available but state not updated');
-        setParakeetDownloaded(true);
-        setParakeetState((prev) => ({
-          ...prev,
-          status: 'completed',
-          progress: 100,
-        }));
-      } else if (!actuallyAvailable && parakeetState.status === 'error') {
-        toast.error('Transcription engine required', {
-          description: 'Please retry the download before continuing.',
-        });
-        return;
+        if (actuallyAvailable && !parakeetDownloaded) {
+          console.log('[DownloadProgressStep] Model available but state not updated');
+          setParakeetDownloaded(true);
+          setParakeetState((prev) => ({
+            ...prev,
+            status: 'completed',
+            progress: 100,
+          }));
+        } else if (!actuallyAvailable && parakeetState.status === 'error') {
+          toast.error('Transcription engine required', {
+            description: 'Please retry the download before continuing.',
+          });
+          return;
+        }
+      } catch (error) {
+        console.warn('[DownloadProgressStep] Failed to verify model:', error);
       }
-    } catch (error) {
-      console.warn('[DownloadProgressStep] Failed to verify model:', error);
     }
 
     // Check if downloads are complete for toast notification
-    const downloadsComplete = parakeetState.status === 'completed' &&
+    const downloadsComplete = (USES_PARAKEET ? parakeetState : whisperState).status === 'completed' &&
       summaryState.status === 'completed';
 
     // Show toast if downloads still in progress
@@ -454,7 +504,7 @@ export function DownloadProgressStep() {
         <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
           <p className="text-sm text-red-600 font-medium">Download Error</p>
           <p className="text-xs text-red-500 mt-1">{state.error}</p>
-          {(title === 'Transcription Engine' || title === 'Summary Engine') && (
+          {((title === 'Transcription Engine' && USES_PARAKEET) || title === 'Summary Engine') && (
             <button
               onClick={title === 'Transcription Engine' ? handleRetryDownload : handleRetrySummaryDownload}
               className="mt-3 w-full h-9 px-4 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-md transition-colors flex items-center justify-center gap-2"
@@ -481,12 +531,19 @@ export function DownloadProgressStep() {
       <div className="flex flex-col items-center space-y-6">
         {/* Download Cards */}
         <div className="w-full max-w-lg space-y-4">
-          {renderDownloadCard(
-            'Transcription Engine',
-            <Mic className="w-5 h-5 text-gray-600" />,
-            parakeetState,
-            '~670 MB'
-          )}
+          {USES_PARAKEET
+            ? renderDownloadCard(
+                'Transcription Engine',
+                <Mic className="w-5 h-5 text-gray-600" />,
+                parakeetState,
+                '~670 MB'
+              )
+            : renderDownloadCard(
+                'Transcription Engine',
+                <Mic className="w-5 h-5 text-gray-600" />,
+                whisperState,
+                `${DEFAULT_WHISPER} (local)`
+              )}
 
           {renderDownloadCard(
             'Summary Engine',
@@ -499,7 +556,7 @@ export function DownloadProgressStep() {
 
         {/* Info Message - Only show when Parakeet is downloaded */}
         <AnimatePresence>
-          {parakeetDownloaded && !summaryModelDownloaded && (
+          {transcriptionReady && !summaryModelDownloaded && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -524,10 +581,10 @@ export function DownloadProgressStep() {
         <div className="w-full max-w-xs">
           <Button
             onClick={handleContinue}
-            disabled={!parakeetDownloaded || isCompleting}
+            disabled={!transcriptionReady || isCompleting}
             className="w-full h-11 bg-gray-900 hover:bg-gray-800 text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {(isCompleting || !parakeetDownloaded) ? (
+            {(isCompleting || !transcriptionReady) ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
               'Continue'
