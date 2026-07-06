@@ -7,6 +7,8 @@ import { configService, ModelConfig } from '@/services/configService';
 import { invoke } from '@tauri-apps/api/core';
 import Analytics from '@/lib/analytics';
 import { BetaFeatures, BetaFeatureKey, loadBetaFeatures, saveBetaFeatures } from '@/types/betaFeatures';
+import { DEFAULT_TRANSCRIPTION_PROVIDER, MODEL_DEFAULTS } from '@/constants/modelDefaults';
+import { DEFAULT_TRANSCRIPTION_LANGUAGE } from '@/constants/languages';
 
 export interface OllamaModel {
   name: string;
@@ -107,8 +109,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
   // Transcript model configuration state
   const [transcriptModelConfig, setTranscriptModelConfig] = useState<TranscriptModelProps>({
-    provider: 'parakeet',
-    model: 'parakeet-tdt-0.6b-v3-int8',
+    provider: DEFAULT_TRANSCRIPTION_PROVIDER,
+    model: MODEL_DEFAULTS[DEFAULT_TRANSCRIPTION_PROVIDER],
     apiKey: null
   });
 
@@ -140,9 +142,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   const [selectedLanguage, setSelectedLanguage] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('primaryLanguage');
-      return saved || 'auto';
+      return saved || DEFAULT_TRANSCRIPTION_LANGUAGE;
     }
-    return 'auto';
+    return DEFAULT_TRANSCRIPTION_LANGUAGE;
   });
 
   // UI preferences state
@@ -199,8 +201,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         if (config) {
           console.log('[ConfigContext] Loaded saved transcript config:', config);
           setTranscriptModelConfig({
-            provider: config.provider || 'parakeet',
-            model: config.model || 'parakeet-tdt-0.6b-v3-int8',
+            provider: config.provider || DEFAULT_TRANSCRIPTION_PROVIDER,
+            model: config.model || MODEL_DEFAULTS[DEFAULT_TRANSCRIPTION_PROVIDER],
             apiKey: config.apiKey || null
           });
         }

@@ -37,4 +37,11 @@ export const LANGUAGES = [
   { code: 'hr', name: 'Croatian' },
   { code: 'bg', name: 'Bulgarian' },
   { code: 'lt', name: 'Lithuanian' },
+  { code: 'mn', name: 'Mongolian' },
 ];
+
+/**
+ * Default transcription language for this build.
+ * IMPORTANT: Keep in sync with DEFAULT_TRANSCRIPTION_LANGUAGE in src-tauri/src/config.rs
+ */
+export const DEFAULT_TRANSCRIPTION_LANGUAGE = 'mn';

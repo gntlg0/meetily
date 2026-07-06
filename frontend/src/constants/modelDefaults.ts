@@ -5,9 +5,16 @@
 
 /**
  * Default Whisper model for transcription when no preference is configured.
- * This is the recommended balance of accuracy and speed.
+ * This build defaults to the Mongolian fine-tune (see NOTES-MN.md).
  */
-export const DEFAULT_WHISPER_MODEL = 'large-v3-turbo';
+export const DEFAULT_WHISPER_MODEL = 'mn-large-v2-q5_0';
+
+/**
+ * Default transcription provider for this build. Parakeet is English-only,
+ * so the Mongolian build routes to local Whisper by default.
+ * IMPORTANT: Keep in sync with DEFAULT_TRANSCRIPTION_PROVIDER in src-tauri/src/config.rs
+ */
+export const DEFAULT_TRANSCRIPTION_PROVIDER = 'localWhisper';
 
 /**
  * Default Parakeet model for transcription when no preference is configured.
