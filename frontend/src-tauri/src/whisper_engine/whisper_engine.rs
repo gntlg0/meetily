@@ -938,6 +938,13 @@ impl WhisperEngine {
             "large-v3-turbo-q5_0" => "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
             "large-v3-q5_0" => "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-q5_0.bin",
 
+            // Locally converted models (no hosted GGML): must be placed in the models
+            // directory manually — see NOTES-MN.md.
+            "mn-large-v2-q5_0" | "mn-large-v2-f16" => return Err(anyhow!(
+                "Model '{}' is converted locally and cannot be downloaded. Place ggml-{}.bin in the models directory (see NOTES-MN.md).",
+                model_name, model_name
+            )),
+
             _ => return Err(anyhow!("Unsupported model: {}", model_name))
         };
         

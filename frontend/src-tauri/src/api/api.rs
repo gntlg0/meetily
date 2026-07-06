@@ -632,10 +632,11 @@ pub async fn api_get_transcript_config<R: Runtime>(
             }
         }
         Ok(None) => {
-            log_info!("No transcript config found, returning default.");
+            let (provider, model) = crate::config::default_provider_and_model();
+            log_info!("No transcript config found, returning default ({}).", provider);
             Ok(Some(TranscriptConfig {
-                provider: "parakeet".to_string(),
-                model: crate::config::DEFAULT_PARAKEET_MODEL.to_string(),
+                provider: provider.to_string(),
+                model: model.to_string(),
                 api_key: None,
             }))
         }
