@@ -7,7 +7,7 @@ use super::api_provider::ApiTranscriptionProvider;
 use super::provider::TranscriptionProvider;
 use log::{info, warn};
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 // ============================================================================
 // TRANSCRIPTION ENGINE ENUM
@@ -45,54 +45,28 @@ impl TranscriptionEngine {
 // MODEL VALIDATION AND INITIALIZATION
 // ============================================================================
 
-/// Read the transcript config, falling back to the compile-time defaults.
-async fn read_transcript_config<R: Runtime>(
-    app: &AppHandle<R>,
-) -> crate::api::api::TranscriptConfig {
-    match crate::api::api::api_get_transcript_config(app.clone(), app.clone().state(), None).await
-    {
-        Ok(Some(config)) => {
-            info!(
-                "📝 Found transcript config - provider: {}, model: {}",
-                config.provider, config.model
-            );
-            config
-        }
-        Ok(None) => {
-            let (provider, model) = crate::config::default_provider_and_model();
-            info!("📝 No transcript config found, defaulting to {}", provider);
-            crate::api::api::TranscriptConfig {
-                provider: provider.to_string(),
-                model: model.to_string(),
-                api_key: None,
-            }
-        }
-        Err(e) => {
-            let (provider, model) = crate::config::default_provider_and_model();
-            warn!(
-                "⚠️ Failed to get transcript config: {}, defaulting to {}",
-                e, provider
-            );
-            crate::api::api::TranscriptConfig {
-                provider: provider.to_string(),
-                model: model.to_string(),
-                api_key: None,
-            }
-        }
-    }
-}
-
 /// Validate that transcription is ready before starting recording.
 ///
-/// API-only build: cloud providers need no local model, so recording/capture
-/// is never blocked here regardless of the configured provider.
+/// API-only build: no local model to check, but the configured cloud
+/// provider must have an API key saved — fail early with a clear message
+/// instead of erroring on every audio chunk mid-meeting.
 pub async fn validate_transcription_model_ready<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<(), String> {
-    let config = read_transcript_config(app).await;
+    let provider = ApiTranscriptionProvider::from_saved_config(app).await?;
+    if !provider.has_api_key() {
+        warn!(
+            "❌ No API key saved for transcription provider '{}'",
+            provider.provider_id()
+        );
+        return Err(format!(
+            "No API key configured for '{}'. Add it in Settings → Transcription before recording.",
+            provider.provider_id()
+        ));
+    }
     info!(
-        "✅ Using cloud transcription provider {} (integration pending) — no local model to validate",
-        config.provider
+        "✅ Cloud transcription provider '{}' is configured",
+        provider.provider_id()
     );
     Ok(())
 }
@@ -102,12 +76,10 @@ pub async fn validate_transcription_model_ready<R: Runtime>(
 pub async fn get_or_init_transcription_engine<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<TranscriptionEngine, String> {
-    let config = read_transcript_config(app).await;
+    let provider = ApiTranscriptionProvider::from_saved_config(app).await?;
     info!(
-        "🌐 Initializing cloud transcription provider '{}' (model '{}')",
-        config.provider, config.model
+        "🌐 Initializing cloud transcription provider '{}'",
+        provider.provider_id()
     );
-    Ok(TranscriptionEngine::Provider(Arc::new(
-        ApiTranscriptionProvider::new(config.provider, config.model),
-    )))
+    Ok(TranscriptionEngine::Provider(Arc::new(provider)))
 }

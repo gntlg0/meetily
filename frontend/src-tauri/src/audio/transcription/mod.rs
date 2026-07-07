@@ -11,7 +11,7 @@ pub mod worker;
 
 // Re-export commonly used types
 pub use provider::{TranscriptionError, TranscriptionProvider, TranscriptResult};
-pub use api_provider::{ApiTranscriptionProvider, transcribe_via_api};
+pub use api_provider::ApiTranscriptionProvider;
 pub use engine::{
     TranscriptionEngine,
     validate_transcription_model_ready,

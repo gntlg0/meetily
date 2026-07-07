@@ -36,6 +36,6 @@ graph TD
 
 *   **Tauri Core:** The heart of the application, responsible for managing the window, handling events, and exposing the Rust core to the frontend.
 *   **Audio Engine:** Captures audio from the microphone and system, processes it, and prepares it for transcription.
-*   **Transcription Engine:** Sends captured speech to a cloud speech-to-text API (provider integration in progress; all call sites route through `transcribe_via_api`).
+*   **Transcription Engine:** Sends captured speech to a cloud speech-to-text API (OpenAI/Groq/ElevenLabs/Deepgram; all call sites route through `ApiTranscriptionProvider`).
 *   **Database:** A local SQLite database that stores meeting metadata, transcripts, and summaries.
 *   **Summary Engine:** Generates meeting summaries using cloud LLM APIs (Anthropic Claude by default; Groq, OpenRouter, OpenAI, or a custom OpenAI-compatible endpoint).

@@ -2,8 +2,8 @@
  * Default transcription configuration.
  *
  * This build is API-only: no local models (Whisper/Parakeet/Ollama) exist.
- * Transcription goes through a cloud ASR provider (integration in progress —
- * see NOTES.md); summaries go through cloud LLM APIs (Anthropic by default).
+ * Transcription goes through the configured cloud ASR provider (see
+ * NOTES.md); summaries go through cloud LLM APIs (Anthropic by default).
  *
  * IMPORTANT: Keep in sync with Rust constants in src-tauri/src/config.rs
  */

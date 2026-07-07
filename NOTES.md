@@ -10,21 +10,27 @@ commit each, on the `api-only` branch.
 - **Recording, import, meeting list, transcript/summary display, and API-key
   settings all work.** Audio capture and file import run end-to-end up to the
   transcription call.
-- **Transcription is a stub.** Every transcription call site routes through
-  `transcribe_via_api()` in
-  `frontend/src-tauri/src/audio/transcription/api_provider.rs`, which returns
-  a clear "Cloud transcription is not configured yet" error. This is the
-  single seam where the real cloud ASR provider (ElevenLabs Scribe / Chimege /
-  Deepgram) gets implemented: implement `TranscriptionProvider` for the
-  chosen API and wire the saved provider/model/API key from
-  `transcript_settings` (they are already persisted by the settings UI).
+- **Transcription is live.** Every transcription call site (live capture,
+  import, retranscription) routes through `ApiTranscriptionProvider` in
+  `frontend/src-tauri/src/audio/transcription/api_provider.rs`, which
+  dispatches on the provider saved in `transcript_settings`:
+  **openai** (gpt-4o-transcribe / whisper-1), **groq** (whisper-large-v3),
+  **elevenLabs** (scribe_v1), **deepgram** (nova-2). Audio is uploaded as
+  16 kHz 16-bit WAV; the language preference is passed as a hint (with a
+  prompt-hint fallback for models that reject rare ISO codes — e.g.
+  gpt-4o-transcribe does not accept `mn` as a language code). If the selected
+  provider has no API key saved, recording/import fails fast with a clear
+  message. Verified end-to-end against the OpenAI API with Mongolian audio
+  (`tests/cloud_transcription.rs`, env-driven, ignored by default since it
+  makes a paid call). A Chimege provider would be one more dispatch arm here.
 - **Summaries work** once an Anthropic API key is set (onboarding step 2 or
   Settings). Groq/OpenAI/OpenRouter/custom OpenAI-compatible endpoints also
   remain available.
 - Defaults live in `frontend/src-tauri/src/config.rs` and
   `frontend/src/constants/modelDefaults.ts`: transcription
-  `elevenLabs`/`scribe_v1` (placeholder until the integration lands),
-  summaries `claude`/`claude-sonnet-4-5-20250929`, language `mn`.
+  `elevenLabs`/`scribe_v1`, summaries `claude`/`claude-sonnet-4-5-20250929`,
+  language `mn`. The active provider is whatever is saved in Settings →
+  Transcription.
 
 ## Removed — UI/onboarding (commit "refactor(ui): …")
 

@@ -310,6 +310,18 @@ async fn run_retranscription<R: Runtime>(
     let processable_count = processable_segments.len();
     info!("Processing {} segments (after splitting)", processable_count);
 
+    // Build the cloud ASR provider once from the saved config; fail fast with
+    // a clear message if no API key is configured.
+    let asr = crate::audio::transcription::ApiTranscriptionProvider::from_saved_config(&app)
+        .await
+        .map_err(|e| anyhow!(e))?;
+    if processable_count > 0 && !asr.has_api_key() {
+        return Err(anyhow!(
+            "No API key configured for '{}'. Add it in Settings → Transcription, then retry.",
+            asr.provider_id()
+        ));
+    }
+
     // Process each speech segment with progress updates
     let mut all_transcripts: Vec<(String, f64, f64)> = Vec::new(); // (text, start_ms, end_ms)
     let mut total_confidence = 0.0f32;
@@ -343,7 +355,10 @@ async fn run_retranscription<R: Runtime>(
         }
 
         // Transcribe this segment via the cloud ASR API
-        let result = crate::audio::transcription::transcribe_via_api(segment.samples.clone(), language.clone()).await
+        use crate::audio::transcription::TranscriptionProvider as _;
+        let result = asr
+            .transcribe(segment.samples.clone(), language.clone())
+            .await
             .map_err(|e| anyhow!("Transcription failed on segment {}: {}", i, e))?;
         let (text, conf) = (result.text, result.confidence.unwrap_or(0.9));
 

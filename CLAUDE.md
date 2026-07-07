@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Key Technology Stack
 - **Desktop App**: Tauri 2.x (Rust) + Next.js 14 + React 18
 - **Audio Processing**: Rust (cpal, silero VAD, professional audio mixing)
-- **Transcription**: cloud ASR API — all call sites route through `audio/transcription/api_provider.rs::transcribe_via_api` (provider integration pending; currently returns a "not configured" error)
+- **Transcription**: cloud ASR API — all call sites route through `audio/transcription/api_provider.rs::ApiTranscriptionProvider` (dispatches on the saved provider: openai/groq/elevenLabs/deepgram)
 - **App API Surface**: Tauri commands and events, not a separate FastAPI service
 - **LLM Integration (summaries)**: Claude (Anthropic, default), Groq, OpenRouter, OpenAI, custom OpenAI-compatible
 
@@ -58,7 +58,7 @@ The archived Python/FastAPI + whisper-server backend was deleted from this fork.
 │                    Frontend (Tauri Desktop App)                  │
 │  ┌──────────────────┐  ┌─────────────────┐  ┌────────────────┐ │
 │  │   Next.js UI     │  │  Rust Backend   │  │ Cloud ASR API  │ │
-│  │  (React/TS)      │←→│  (Audio + IPC)  │←→│  (Local STT)   │ │
+│  │  (React/TS)      │←→│  (Audio + IPC)  │←→│  (Cloud STT)   │ │
 │  └──────────────────┘  └─────────────────┘  └────────────────┘ │
 │         ↑ Tauri Events           ↑ Audio Pipeline               │
 └─────────────────────────────────────────────────────────────────┘
@@ -166,13 +166,15 @@ await listen<TranscriptUpdate>('transcript-update', (event) => {
 
 There are no local models and no model storage. Every transcription call
 (live capture, import, retranscription) routes through
-`frontend/src-tauri/src/audio/transcription/api_provider.rs::transcribe_via_api`,
-which currently returns a "not configured" error — this is the seam where the
-cloud ASR provider (ElevenLabs Scribe / Chimege / Deepgram) gets implemented.
-Provider/model/API-key selection is persisted in the `transcript_settings`
-SQLite table; defaults live in `src/config.rs` (keep in sync with
-`frontend/src/constants/modelDefaults.ts`). See NOTES.md for the
-implementation checklist.
+`frontend/src-tauri/src/audio/transcription/api_provider.rs::ApiTranscriptionProvider`,
+which dispatches on the saved provider: openai (gpt-4o-transcribe/whisper-1),
+groq (whisper-large-v3), elevenLabs (scribe_v1), deepgram (nova-2). Audio is
+uploaded as 16 kHz WAV with the language preference as a hint (prompt-hint
+fallback for models that reject rare ISO codes). Adding a provider (e.g.
+Chimege) = one more dispatch arm. Provider/model/API-key selection is
+persisted in the `transcript_settings` SQLite table; defaults live in
+`src/config.rs` (keep in sync with `frontend/src/constants/modelDefaults.ts`).
+See NOTES.md for details.
 
 ## Critical Development Patterns
 
@@ -341,7 +343,7 @@ $env:RUST_LOG="debug"; ./clean_run_windows.bat
    - Windows: WASAPI exclusive mode can conflict with other apps
    - System audio requires virtual device (BlackHole on macOS, WASAPI loopback on Windows)
 
-3. **Transcription is a stub**: until the cloud ASR provider lands, `transcribe_via_api` returns a "not configured" error by design — recording and import still work end-to-end up to that call.
+3. **Transcription needs an API key**: recording/import fail fast with a clear message when the selected cloud ASR provider has no key saved (Settings → Transcription).
 
 4. **No Separate Backend Dependency**: Meeting persistence, transcription, and LLM features are handled by the Tauri app.
 

@@ -94,14 +94,14 @@ Whether you're a defense consultant, enterprise executive, legal professional, o
 
 > **Fork notice — API-only build.** This fork removes all local AI models
 > (Whisper, Parakeet, Ollama, bundled llama.cpp). Transcription uses a cloud
-> speech-to-text API (integration in progress — see [NOTES.md](NOTES.md)) and
+> speech-to-text API (OpenAI / Groq / ElevenLabs / Deepgram — see [NOTES.md](NOTES.md)) and
 > summaries use cloud LLM APIs (Anthropic by default). Recordings, transcripts,
 > and meeting data still stay on your machine.
 
 ## Features
 
 - **Your data on your machine:** Recordings, transcripts, and meeting notes are stored locally.
-- **Real-time Transcription:** Live transcripts via a cloud speech-to-text API (provider integration in progress).
+- **Real-time Transcription:** Live transcripts via a cloud speech-to-text API (OpenAI, Groq, ElevenLabs, or Deepgram).
 - **AI-Powered Summaries:** Generate summaries of your meetings using the Anthropic API (Claude).
 - **Multi-Platform:** Works on macOS, Windows, and Linux.
 - **Open Source:** Meetily is open source and free to use.
@@ -123,9 +123,8 @@ Whether you're a defense consultant, enterprise executive, legal professional, o
 
 ### 🐧 **Linux**
 
-Build from source following our detailed guides:
+Build from source following our detailed guide:
 
-- [Building on Linux](docs/building_in_linux.md)
 - [General Build Instructions](docs/BUILDING.md)
 
 **Quick start:**
@@ -141,10 +140,9 @@ pnpm run tauri:build
 
 ### ☁️ Cloud Transcription
 
-Transcription goes through a cloud speech-to-text API configured in Settings →
-Transcription. The provider integration is being finalized; until it lands,
-transcription returns a clear "not configured" message (recording and audio
-import still work — see [NOTES.md](NOTES.md)).
+Transcription goes through the cloud speech-to-text provider configured in
+Settings → Transcription (OpenAI, Groq, ElevenLabs, or Deepgram — an API key
+for the selected provider is required). See [NOTES.md](NOTES.md) for details.
 
 <p align="center">
     <img src="docs/home.png" width="650" style="border-radius: 10px;" alt="Meetily Demo" />

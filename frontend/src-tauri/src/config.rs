@@ -1,8 +1,8 @@
 /// Application configuration constants
 ///
 /// This build is API-only: no local models (Whisper/Parakeet/Ollama/llama.cpp).
-/// Transcription goes through a cloud ASR provider (integration pending — the
-/// call sites route through audio::transcription::transcribe_via_api), and
+/// Transcription goes through the configured cloud ASR provider (the
+/// call sites route through audio::transcription::ApiTranscriptionProvider), and
 /// summaries go through cloud LLM APIs.
 ///
 /// IMPORTANT: Keep in sync with frontend/src/constants/modelDefaults.ts

@@ -5,7 +5,7 @@ A modern desktop application for recording, transcribing, and analyzing meetings
 ## Features
 
 - Real-time audio recording from both microphone and system audio
-- Live transcription via a cloud speech-to-text API (integration in progress)
+- Live transcription via a cloud speech-to-text API (OpenAI, Groq, ElevenLabs, or Deepgram)
 - Native desktop integration using Tauri
 - Rich text editor for note-taking
 - Recordings, transcripts, and meeting data stored locally
@@ -130,7 +130,7 @@ pnpm run tauri:build
 
 Meetily does not require any separate service or local model downloads.
 Transcription goes through a cloud speech-to-text API configured in Settings
-(provider integration in progress — see [NOTES.md](../NOTES.md)).
+(an API key for the selected provider is required — see [NOTES.md](../NOTES.md)).
 
 For build details, see:
 
