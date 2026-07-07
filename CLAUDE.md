@@ -8,14 +8,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 1. **Frontend**: Tauri-based desktop application (Rust + Next.js + TypeScript)
 2. **Rust Backend**: Tauri commands, audio capture, transcription, storage, and summarization orchestration
-3. **Legacy Backend Archive**: the old Python/FastAPI, Docker, and standalone whisper-server backend under `backend/` is archived and unsupported
+3. **API-only fork**: all local AI models were removed (see NOTES.md). The old Python/whisper-server backend directory was deleted entirely.
 
 ### Key Technology Stack
 - **Desktop App**: Tauri 2.x (Rust) + Next.js 14 + React 18
-- **Audio Processing**: Rust (cpal, whisper-rs, professional audio mixing)
-- **Transcription**: Whisper.cpp / whisper-rs and Parakeet paths in the Tauri app
+- **Audio Processing**: Rust (cpal, silero VAD, professional audio mixing)
+- **Transcription**: cloud ASR API — all call sites route through `audio/transcription/api_provider.rs::transcribe_via_api` (provider integration pending; currently returns a "not configured" error)
 - **App API Surface**: Tauri commands and events, not a separate FastAPI service
-- **LLM Integration**: Ollama (local), Claude, Groq, OpenRouter
+- **LLM Integration (summaries)**: Claude (Anthropic, default), Groq, OpenRouter, OpenAI, custom OpenAI-compatible
 
 ## Essential Development Commands
 
@@ -39,20 +39,12 @@ pnpm run dev                # Next.js dev server (port 3118)
 pnpm run tauri:dev          # Full Tauri development mode
 pnpm run tauri:build        # Production build
 
-# GPU-Specific Builds (for testing acceleration)
-pnpm run tauri:dev:metal    # macOS Metal GPU
-pnpm run tauri:dev:cuda     # NVIDIA CUDA
-pnpm run tauri:dev:vulkan   # AMD/Intel Vulkan
-pnpm run tauri:dev:cpu      # CPU-only (no GPU)
+# No GPU feature flags exist — inference is API-based; plain builds only.
 ```
 
-### Legacy Backend Archive
+### Legacy Backend
 
-**Location**: `/backend`
-
-The Python/FastAPI backend, Docker setup, and standalone whisper-server scripts are archived for historical reference and migration context only. Do not use them for current development, new installs, production deployments, or issue triage for the supported app.
-
-The archived FastAPI service had unauthenticated, development-oriented CORS behavior. Treat that behavior as obsolete legacy context, not as a supported production API.
+The archived Python/FastAPI + whisper-server backend was deleted from this fork. Do not reintroduce it; all app behavior lives in the Rust/Tauri core.
 
 ### Service Endpoints
 - **Frontend Dev**: http://localhost:3118
@@ -65,7 +57,7 @@ The archived FastAPI service had unauthenticated, development-oriented CORS beha
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Frontend (Tauri Desktop App)                  │
 │  ┌──────────────────┐  ┌─────────────────┐  ┌────────────────┐ │
-│  │   Next.js UI     │  │  Rust Backend   │  │ Whisper Engine │ │
+│  │   Next.js UI     │  │  Rust Backend   │  │ Cloud ASR API  │ │
 │  │  (React/TS)      │←→│  (Audio + IPC)  │←→│  (Local STT)   │ │
 │  └──────────────────┘  └─────────────────┘  └────────────────┘ │
 │         ↑ Tauri Events           ↑ Audio Pipeline               │
@@ -91,10 +83,10 @@ Raw Audio (Mic + System)
     │ (Pre-mixed)     │        │ (VAD-filtered)      │
     └─────────────────┘        └─────────────────────┘
               ↓                          ↓
-    RecordingSaver.save()      WhisperEngine.transcribe()
+    RecordingSaver.save()      transcribe_via_api()
 ```
 
-**Key Insight**: The pipeline performs **professional audio mixing** (RMS-based ducking, clipping prevention) for recording, while simultaneously applying **Voice Activity Detection (VAD)** to send only speech segments to Whisper for transcription.
+**Key Insight**: The pipeline performs **professional audio mixing** (RMS-based ducking, clipping prevention) for recording, while simultaneously applying **Voice Activity Detection (VAD)** to send only speech segments to the transcription provider (keeps metered cloud ASR usage low).
 
 ### Audio Device Modularization (Recently Completed)
 
@@ -170,25 +162,17 @@ await listen<TranscriptUpdate>('transcript-update', (event) => {
 });
 ```
 
-### Whisper Model Management
+### Transcription (API-only)
 
-**Model Storage Locations**:
-- **Development**: `frontend/models/`
-- **Production (macOS)**: `~/Library/Application Support/Meetily/models/`
-- **Production (Windows)**: `%APPDATA%\Meetily\models\`
-
-**Model Loading** (frontend/src-tauri/src/whisper_engine/whisper_engine.rs):
-```rust
-pub async fn load_model(&self, model_name: &str) -> Result<()> {
-    // Automatically detects GPU capabilities (Metal/CUDA/Vulkan)
-    // Falls back to CPU if GPU unavailable
-}
-```
-
-**GPU Acceleration**:
-- **macOS**: Metal + CoreML (automatically enabled)
-- **Windows/Linux**: CUDA (NVIDIA), Vulkan (AMD/Intel), or CPU
-- Configure via Cargo features: `--features cuda`, `--features vulkan`
+There are no local models and no model storage. Every transcription call
+(live capture, import, retranscription) routes through
+`frontend/src-tauri/src/audio/transcription/api_provider.rs::transcribe_via_api`,
+which currently returns a "not configured" error — this is the seam where the
+cloud ASR provider (ElevenLabs Scribe / Chimege / Deepgram) gets implemented.
+Provider/model/API-key selection is persisted in the `transcript_settings`
+SQLite table; defaults live in `src/config.rs` (keep in sync with
+`frontend/src/constants/modelDefaults.ts`). See NOTES.md for the
+implementation checklist.
 
 ## Critical Development Patterns
 
@@ -324,20 +308,16 @@ $env:RUST_LOG="debug"; ./clean_run_windows.bat
 
 ### macOS
 - **Audio Capture**: Uses ScreenCaptureKit for system audio (macOS 13+)
-- **GPU**: Metal + CoreML automatically enabled
 - **Permissions**: Requires microphone + screen recording permissions
 - **System Audio**: Requires virtual audio device (BlackHole) for system capture
 
 ### Windows
 - **Audio Capture**: Uses WASAPI (Windows Audio Session API)
-- **GPU**: CUDA (NVIDIA) or Vulkan (AMD/Intel) via Cargo features
 - **Build Tools**: Requires Visual Studio Build Tools with C++ workload
 - **System Audio**: Uses WASAPI loopback for system capture
 
 ### Linux
 - **Audio Capture**: ALSA/PulseAudio
-- **GPU**: CUDA (NVIDIA) or Vulkan via Cargo features
-- **Dependencies**: Requires cmake, llvm, libomp
 
 ## Performance Optimization Guidelines
 
@@ -345,14 +325,7 @@ $env:RUST_LOG="debug"; ./clean_run_windows.bat
 - Use `perf_debug!()` / `perf_trace!()` for hot-path logging (zero cost in release)
 - Batch audio metrics using `AudioMetricsBatcher` (pipeline.rs)
 - Pre-allocate buffers with `AudioBufferPool` (buffer_pool.rs)
-- VAD filtering reduces Whisper load by ~70% (only processes speech)
-
-### Whisper Transcription
-- **Model Selection**: Balance accuracy vs speed
-  - Development: `base` or `small` (fast iteration)
-  - Production: `medium` or `large-v3` (best quality)
-- **GPU Acceleration**: 5-10x faster than CPU
-- **Parallel Processing**: Available in `whisper_engine/parallel_processor.rs` for batch workloads
+- VAD filtering sends only speech segments to transcription (~70% reduction — keeps metered cloud ASR usage low)
 
 ### Frontend Performance
 - React state updates batched via Sidebar context
@@ -368,15 +341,13 @@ $env:RUST_LOG="debug"; ./clean_run_windows.bat
    - Windows: WASAPI exclusive mode can conflict with other apps
    - System audio requires virtual device (BlackHole on macOS, WASAPI loopback on Windows)
 
-3. **Whisper Model Loading**: Models are loaded once and cached. Changing models requires app restart or manual unload/reload.
+3. **Transcription is a stub**: until the cloud ASR provider lands, `transcribe_via_api` returns a "not configured" error by design — recording and import still work end-to-end up to that call.
 
-4. **No Separate Backend Dependency**: Meeting persistence, transcription, and LLM features are handled by the Tauri app. Do not reintroduce the archived FastAPI backend as a supported requirement.
+4. **No Separate Backend Dependency**: Meeting persistence, transcription, and LLM features are handled by the Tauri app.
 
-5. **Legacy FastAPI Security Context**: The archived FastAPI/CORS behavior is unsupported legacy code and must not be treated as a supported production API.
+5. **File Paths**: Use Tauri's path APIs (`downloadDir`, etc.) for cross-platform compatibility. Never hardcode paths.
 
-6. **File Paths**: Use Tauri's path APIs (`downloadDir`, etc.) for cross-platform compatibility. Never hardcode paths.
-
-7. **Audio Permissions**: Request permissions early. macOS requires both microphone AND screen recording for system audio.
+6. **Audio Permissions**: Request permissions early. macOS requires both microphone AND screen recording for system audio.
 
 ## Repository-Specific Conventions
 
@@ -405,5 +376,6 @@ $env:RUST_LOG="debug"; ./clean_run_windows.bat
 - [frontend/src/app/page.tsx](frontend/src/app/page.tsx) - Main recording interface
 - [frontend/src/components/Sidebar/SidebarProvider.tsx](frontend/src/components/Sidebar/SidebarProvider.tsx) - Global state management
 
-**Whisper Integration**:
-- [frontend/src-tauri/src/whisper_engine/whisper_engine.rs](frontend/src-tauri/src/whisper_engine/whisper_engine.rs) - Whisper model management and transcription
+**Transcription Integration**:
+- [frontend/src-tauri/src/audio/transcription/api_provider.rs](frontend/src-tauri/src/audio/transcription/api_provider.rs) - `transcribe_via_api` seam for the cloud ASR provider
+- [frontend/src-tauri/src/audio/transcription/engine.rs](frontend/src-tauri/src/audio/transcription/engine.rs) - provider selection and validation

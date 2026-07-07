@@ -5,11 +5,10 @@ A modern desktop application for recording, transcribing, and analyzing meetings
 ## Features
 
 - Real-time audio recording from both microphone and system audio
-- Live transcription using Whisper ASR (locally running)
+- Live transcription via a cloud speech-to-text API (integration in progress)
 - Native desktop integration using Tauri
-- Speaker diarization support
 - Rich text editor for note-taking
-- Privacy-focused: All processing happens locally
+- Recordings, transcripts, and meeting data stored locally
 
 ## Prerequisites
 
@@ -127,14 +126,15 @@ pnpm run tauri:dev
 pnpm run tauri:build
 ```
 
-## Local Transcription
+## Transcription
 
-Current Meetily does not require a separate FastAPI service, Docker backend, or manually started whisper-server process. Local transcription is handled by the Rust/Tauri desktop app.
+Meetily does not require any separate service or local model downloads.
+Transcription goes through a cloud speech-to-text API configured in Settings
+(provider integration in progress — see [NOTES.md](../NOTES.md)).
 
-For build and acceleration details, see:
+For build details, see:
 
 - [Building from Source](../docs/BUILDING.md)
-- [GPU Acceleration](../docs/GPU_ACCELERATION.md)
 - [Architecture](../docs/architecture.md)
 
 ## Development

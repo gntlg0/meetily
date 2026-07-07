@@ -92,14 +92,20 @@ Whether you're a defense consultant, enterprise executive, legal professional, o
 
 </details>
 
+> **Fork notice — API-only build.** This fork removes all local AI models
+> (Whisper, Parakeet, Ollama, bundled llama.cpp). Transcription uses a cloud
+> speech-to-text API (integration in progress — see [NOTES.md](NOTES.md)) and
+> summaries use cloud LLM APIs (Anthropic by default). Recordings, transcripts,
+> and meeting data still stay on your machine.
+
 ## Features
 
-- **Local First:** All processing is done on your machine. No data ever leaves your computer.
-- **Real-time Transcription:** Get a live transcript of your meeting as it happens.
-- **AI-Powered Summaries:** Generate summaries of your meetings using powerful language models.
+- **Your data on your machine:** Recordings, transcripts, and meeting notes are stored locally.
+- **Real-time Transcription:** Live transcripts via a cloud speech-to-text API (provider integration in progress).
+- **AI-Powered Summaries:** Generate summaries of your meetings using the Anthropic API (Claude).
 - **Multi-Platform:** Works on macOS, Windows, and Linux.
 - **Open Source:** Meetily is open source and free to use.
-- **Flexible AI Provider Support:** Choose from Ollama (local), Claude, Groq, OpenRouter, or use your own OpenAI-compatible endpoint.
+- **Flexible AI Provider Support:** Claude, Groq, OpenRouter, OpenAI, or your own OpenAI-compatible endpoint.
 
 ## Installation
 
@@ -128,14 +134,17 @@ Build from source following our detailed guides:
 git clone https://github.com/Zackriya-Solutions/meeting-minutes
 cd meeting-minutes/frontend
 pnpm install
-./build-gpu.sh
+pnpm run tauri:build
 ```
 
 ## Key Features in Action
 
-### 🎯 Local Transcription
+### ☁️ Cloud Transcription
 
-Transcribe meetings entirely on your device using **Whisper** or **Parakeet** models. No cloud required.
+Transcription goes through a cloud speech-to-text API configured in Settings →
+Transcription. The provider integration is being finalized; until it lands,
+transcription returns a clear "not configured" message (recording and audio
+import still work — see [NOTES.md](NOTES.md)).
 
 <p align="center">
     <img src="docs/home.png" width="650" style="border-radius: 10px;" alt="Meetily Demo" />
@@ -143,7 +152,7 @@ Transcribe meetings entirely on your device using **Whisper** or **Parakeet** mo
 
 ### 📥 Import & Enhance `Beta`
 
-Import existing audio files to generate transcripts, or enhance to re-transcribe any recorded meeting with a different model or language, all processed locally.
+Import existing audio files to generate transcripts, or enhance to re-transcribe any recorded meeting with a different language.
 
 > Contributed by [Jeremi Joslin](https://github.com/jeremi), improved by [Vishnu P S](https://github.com/p-s-vishnu) and [Mohammed Safvan](https://github.com/mohammedsafvan)
 
@@ -153,7 +162,7 @@ Import existing audio files to generate transcripts, or enhance to re-transcribe
 
 ### 🤖 AI-Powered Summaries
 
-Generate meeting summaries with your choice of AI provider. **Ollama** (local) is recommended, with support for Claude, Groq, OpenRouter, and OpenAI.
+Generate meeting summaries with your choice of API provider. **Claude (Anthropic)** is the default, with support for Groq, OpenRouter, and OpenAI.
 
 <p align="center">
     <img src="docs/summary.png" width="650" style="border-radius: 10px;" alt="Summary generation" />
@@ -165,7 +174,7 @@ Generate meeting summaries with your choice of AI provider. **Ollama** (local) i
 
 ### 🔒 Privacy-First Design
 
-All data stays on your machine. Transcription models, recordings, and transcripts are stored locally.
+Recordings, transcripts, and meeting data are stored locally. Only the audio/text sent to your configured AI APIs leaves the machine.
 
 <p align="center">
     <img src="docs/settings.png" width="650" style="border-radius: 10px;" alt="Local Transcription and storage" />
