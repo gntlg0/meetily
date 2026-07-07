@@ -165,7 +165,12 @@ impl ApiTranscriptionProvider {
             .await?;
 
         if status.is_success() {
-            return parse_text_field(&body);
+            let text = parse_text_field(&body)?;
+            return Ok(if use_prompt {
+                strip_prompt_echo(text, language.as_deref())
+            } else {
+                text
+            });
         }
 
         // OpenAI gates the `language` param to a supported subset (Mongolian
@@ -180,9 +185,11 @@ impl ApiTranscriptionProvider {
                 language
             );
             self.language_param_rejected.store(true, Ordering::Relaxed);
-            let (status2, body2) = self.openai_request(endpoint, wav, language, true).await?;
+            let (status2, body2) = self
+                .openai_request(endpoint, wav, language.clone(), true)
+                .await?;
             if status2.is_success() {
-                return parse_text_field(&body2);
+                return parse_text_field(&body2).map(|t| strip_prompt_echo(t, language.as_deref()));
             }
             return Err(api_error(&self.provider, status2, &body2));
         }
@@ -311,6 +318,24 @@ impl ApiTranscriptionProvider {
         let text = alt["transcript"].as_str().unwrap_or_default().to_string();
         let confidence = alt["confidence"].as_f64().map(|c| c as f32);
         Ok((text, confidence))
+    }
+}
+
+/// On silent or ambiguous segments Whisper sometimes recites its conditioning
+/// prompt instead of transcribing. Remove verbatim echoes of our language
+/// hint from the returned text. (Mutated echoes can still slip through — the
+/// real fix is a provider that supports the language natively.)
+fn strip_prompt_echo(text: String, language: Option<&str>) -> String {
+    match language {
+        Some(lang) => {
+            let hint = language_prompt(lang);
+            if text.contains(&hint) {
+                text.replace(&hint, " ").split_whitespace().collect::<Vec<_>>().join(" ")
+            } else {
+                text
+            }
+        }
+        None => text,
     }
 }
 
