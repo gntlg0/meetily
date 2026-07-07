@@ -11,6 +11,7 @@
 // Audio arrives as 16 kHz mono f32 and is uploaded as 16-bit PCM WAV.
 
 use async_trait::async_trait;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Manager, Runtime};
 
@@ -57,21 +58,21 @@ fn language_hint(language: Option<&str>) -> Option<String> {
     }
 }
 
-/// English name for a language code, used for prompt hints when a provider
-/// rejects the ISO code itself (e.g. OpenAI gpt-4o-transcribe with "mn").
-fn language_name(code: &str) -> &str {
+/// Prompt used to steer the model toward a language when the API rejects the
+/// ISO code itself (OpenAI gates `language` to a subset — Mongolian is
+/// excluded for both whisper-1 and gpt-4o-transcribe).
+///
+/// Whisper-family models bias their output language toward the language the
+/// prompt itself is written in, so the hint must be written IN the target
+/// language — an English "The audio is in Mongolian." makes whisper-1 decode
+/// gibberish, while a native-language sentence anchors the decoder.
+fn language_prompt(code: &str) -> String {
     match code {
-        "mn" => "Mongolian",
-        "en" => "English",
-        "ru" => "Russian",
-        "zh" => "Chinese",
-        "ja" => "Japanese",
-        "ko" => "Korean",
-        "de" => "German",
-        "fr" => "French",
-        "es" => "Spanish",
-        "kk" => "Kazakh",
-        other => other,
+        "mn" => "Энэ бол монгол хэлээр ярьсан хурлын бичлэг юм.".to_string(),
+        "ru" => "Это запись разговора на русском языке.".to_string(),
+        "kk" => "Бұл қазақ тіліндегі әңгіме жазбасы.".to_string(),
+        "en" => "This is a recording of a conversation in English.".to_string(),
+        other => format!("The audio is in the language with ISO code '{}'.", other),
     }
 }
 
@@ -80,6 +81,11 @@ pub struct ApiTranscriptionProvider {
     model: String,
     api_key: Option<String>,
     client: reqwest::Client,
+    // Set once the API rejects our language code (OpenAI's endpoint gates
+    // `language` to a subset that excludes e.g. Mongolian, for both whisper-1
+    // and gpt-4o-transcribe). Subsequent segments then skip the doomed
+    // attempt and hint the language via the prompt field directly.
+    language_param_rejected: AtomicBool,
 }
 
 impl ApiTranscriptionProvider {
@@ -96,6 +102,7 @@ impl ApiTranscriptionProvider {
                 .timeout(REQUEST_TIMEOUT)
                 .build()
                 .expect("failed to build HTTP client"),
+            language_param_rejected: AtomicBool::new(false),
         }
     }
 
@@ -149,25 +156,38 @@ impl ApiTranscriptionProvider {
         wav: Vec<u8>,
         language: Option<String>,
     ) -> Result<String, TranscriptionError> {
-        match self
-            .openai_request(endpoint, wav.clone(), language.clone(), false)
-            .await
-        {
-            // Some models (e.g. gpt-4o-transcribe) reject ISO codes outside
-            // their supported set. Retry once, hinting the language through
-            // the prompt field instead, as the API error suggests.
-            Err(TranscriptionError::EngineFailed(msg))
-                if language.is_some() && msg.contains("\"param\": \"language\"") =>
-            {
-                log::warn!(
-                    "{} rejected language code {:?}; retrying with a prompt hint",
-                    self.provider,
-                    language
-                );
-                self.openai_request(endpoint, wav, language, true).await
-            }
-            other => other,
+        // If a previous segment already learned that this endpoint rejects
+        // our language code, go straight to the prompt-hint form.
+        let use_prompt = language.is_some() && self.language_param_rejected.load(Ordering::Relaxed);
+
+        let (status, body) = self
+            .openai_request(endpoint, wav.clone(), language.clone(), use_prompt)
+            .await?;
+
+        if status.is_success() {
+            return parse_text_field(&body);
         }
+
+        // OpenAI gates the `language` param to a supported subset (Mongolian
+        // is excluded for both whisper-1 and gpt-4o-transcribe, with error
+        // codes unsupported_language / invalid_value). Retry once with the
+        // language hinted through the prompt field instead, and remember the
+        // rejection so later segments skip the doomed attempt.
+        if !use_prompt && language.is_some() && is_language_param_error(&body) {
+            log::warn!(
+                "{} rejected language code {:?}; retrying with a prompt hint",
+                self.provider,
+                language
+            );
+            self.language_param_rejected.store(true, Ordering::Relaxed);
+            let (status2, body2) = self.openai_request(endpoint, wav, language, true).await?;
+            if status2.is_success() {
+                return parse_text_field(&body2);
+            }
+            return Err(api_error(&self.provider, status2, &body2));
+        }
+
+        Err(api_error(&self.provider, status, &body))
     }
 
     async fn openai_request(
@@ -176,7 +196,7 @@ impl ApiTranscriptionProvider {
         wav: Vec<u8>,
         language: Option<String>,
         language_as_prompt: bool,
-    ) -> Result<String, TranscriptionError> {
+    ) -> Result<(reqwest::StatusCode, String), TranscriptionError> {
         let key = self.require_key()?;
         let part = reqwest::multipart::Part::bytes(wav)
             .file_name("audio.wav")
@@ -188,10 +208,7 @@ impl ApiTranscriptionProvider {
             .text("response_format", "json");
         if let Some(lang) = language {
             if language_as_prompt {
-                form = form.text(
-                    "prompt",
-                    format!("The audio is in {}.", language_name(&lang)),
-                );
+                form = form.text("prompt", language_prompt(&lang));
             } else {
                 form = form.text("language", lang);
             }
@@ -211,13 +228,7 @@ impl ApiTranscriptionProvider {
             .text()
             .await
             .map_err(|e| TranscriptionError::EngineFailed(e.to_string()))?;
-        if !status.is_success() {
-            return Err(api_error(&self.provider, status, &body));
-        }
-
-        let json: serde_json::Value = serde_json::from_str(&body)
-            .map_err(|e| TranscriptionError::EngineFailed(format!("bad response JSON: {}", e)))?;
-        Ok(json["text"].as_str().unwrap_or_default().to_string())
+        Ok((status, body))
     }
 
     async fn transcribe_elevenlabs(
@@ -301,6 +312,20 @@ impl ApiTranscriptionProvider {
         let confidence = alt["confidence"].as_f64().map(|c| c as f32);
         Ok((text, confidence))
     }
+}
+
+/// True when an error body pinpoints the `language` parameter (any error
+/// code, any JSON formatting) — the signal to retry with a prompt hint.
+fn is_language_param_error(body: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(body)
+        .map(|v| v["error"]["param"].as_str() == Some("language"))
+        .unwrap_or(false)
+}
+
+fn parse_text_field(body: &str) -> Result<String, TranscriptionError> {
+    let json: serde_json::Value = serde_json::from_str(body)
+        .map_err(|e| TranscriptionError::EngineFailed(format!("bad response JSON: {}", e)))?;
+    Ok(json["text"].as_str().unwrap_or_default().to_string())
 }
 
 fn api_error(provider: &str, status: reqwest::StatusCode, body: &str) -> TranscriptionError {
