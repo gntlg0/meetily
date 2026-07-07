@@ -30,6 +30,15 @@ pub async fn initialize_database_on_startup(app: &AppHandle) -> Result<(), Strin
             .await
             .map_err(|e| format!("Failed to initialize database manager: {}", e))?;
 
+        // Existing databases may still reference removed local providers
+        // (whisper/parakeet/ollama/builtin-ai) — rewrite them to the API defaults.
+        info!("Checking for legacy local-model provider settings to migrate");
+        if let Err(e) =
+            crate::database::commands::migrate_legacy_local_providers(db_manager.pool()).await
+        {
+            log::error!("Failed to migrate legacy local providers: {}", e);
+        }
+
         app.manage(AppState { db_manager });
         info!("Database initialized successfully");
     }

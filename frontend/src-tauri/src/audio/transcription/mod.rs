@@ -1,22 +1,21 @@
 // audio/transcription/mod.rs
 //
 // Transcription module: Provider abstraction, engine management, and worker pool.
+// This build is API-only: all transcription routes through the cloud
+// ApiTranscriptionProvider (see api_provider.rs).
 
 pub mod provider;
-pub mod whisper_provider;
-pub mod parakeet_provider;
+pub mod api_provider;
 pub mod engine;
 pub mod worker;
 
 // Re-export commonly used types
 pub use provider::{TranscriptionError, TranscriptionProvider, TranscriptResult};
-pub use whisper_provider::WhisperProvider;
-pub use parakeet_provider::ParakeetProvider;
+pub use api_provider::{ApiTranscriptionProvider, transcribe_via_api};
 pub use engine::{
     TranscriptionEngine,
     validate_transcription_model_ready,
     get_or_init_transcription_engine,
-    get_or_init_whisper
 };
 pub use worker::{
     start_transcription_task,

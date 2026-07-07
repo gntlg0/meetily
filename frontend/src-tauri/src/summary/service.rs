@@ -8,22 +8,16 @@ use crate::summary::processor::{
     extract_meeting_name_from_markdown, generate_meeting_summary, language_name_from_code,
 };
 use crate::summary::templates::{self, Template};
-use crate::ollama::metadata::ModelMetadataCache;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager};
+use std::time::Instant;
+use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use once_cell::sync::Lazy;
-
-// Global cache for model metadata (5 minute TTL)
-static METADATA_CACHE: Lazy<ModelMetadataCache> = Lazy::new(|| {
-    ModelMetadataCache::new(Duration::from_secs(300))
-});
 
 // Global registry for cancellation tokens (thread-safe)
 static CANCELLATION_REGISTRY: Lazy<Arc<Mutex<HashMap<String, CancellationToken>>>> =
@@ -320,9 +314,8 @@ impl SummaryService {
             }
         };
 
-        // Validate and setup api_key, Flexible for Ollama, BuiltInAI, and CustomOpenAI
-        let api_key = if provider == LLMProvider::Ollama || provider == LLMProvider::BuiltInAI || provider == LLMProvider::CustomOpenAI {
-            // These providers don't require API keys from the standard database column
+        // Validate and setup api_key (CustomOpenAI carries its key in its own JSON config)
+        let api_key = if provider == LLMProvider::CustomOpenAI {
             String::new()
         } else {
             match SettingsRepository::get_api_key(&pool, &model_provider).await {
@@ -338,20 +331,6 @@ impl SummaryService {
                     return;
                 }
             }
-        };
-
-        // Get Ollama endpoint if provider is Ollama
-        let ollama_endpoint = if provider == LLMProvider::Ollama {
-            match SettingsRepository::get_model_config(&pool).await {
-                Ok(Some(config)) => config.ollama_endpoint,
-                Ok(None) => None,
-                Err(e) => {
-                    info!("Failed to retrieve Ollama endpoint: {}, using default", e);
-                    None
-                }
-            }
-        } else {
-            None
         };
 
         // Get CustomOpenAI config if provider is CustomOpenAI
@@ -390,54 +369,9 @@ impl SummaryService {
             api_key
         };
 
-        // Dynamically fetch context size based on provider and model
-        let token_threshold = if provider == LLMProvider::Ollama {
-            match METADATA_CACHE.get_or_fetch(&model_name, ollama_endpoint.as_deref()).await {
-                Ok(metadata) => {
-                    // Reserve 300 tokens for prompt overhead
-                    let optimal = metadata.context_size.saturating_sub(300);
-                    info!(
-                        "✓ Using dynamic context for {}: {} tokens (chunk size: {})",
-                        model_name, metadata.context_size, optimal
-                    );
-                    optimal
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to fetch context for {}: {}. Using default 4000",
-                        model_name, e
-                    );
-                    4000  // Fallback to safe default
-                }
-            }
-        } else if provider == LLMProvider::BuiltInAI {
-            // Get model's context size from registry
-            use crate::summary::summary_engine::models;
-            let model = models::get_model_by_name(&model_name)
-                .ok_or_else(|| format!("Unknown model: {}", model_name));
-
-            match model {
-                Ok(model_def) => {
-                    // Reserve 300 tokens for prompt overhead
-                    let optimal = model_def.context_size.saturating_sub(300) as usize;
-                    info!(
-                        "✓ Using BuiltInAI context size: {} tokens (chunk size: {})",
-                        model_def.context_size, optimal
-                    );
-                    optimal
-                }
-                Err(e) => {
-                    warn!("{}, using default 2048", e);
-                    1748  // 2048 - 300 for overhead
-                }
-            }
-        } else {
-            // Cloud providers (OpenAI, Claude, Groq, CustomOpenAI) handle large contexts automatically
-            100000  // Effectively unlimited for single-pass processing
-        };
-
-        // Get app data directory for BuiltInAI provider
-        let app_data_dir = _app.path().app_data_dir().ok();
+        // Cloud providers (OpenAI, Claude, Groq, OpenRouter, CustomOpenAI) handle
+        // large contexts automatically — effectively unlimited for single-pass processing.
+        let token_threshold = 100000;
 
         if let Some(code) = &summary_language {
             info!("📝 Summary language preference: {}", code);
@@ -470,7 +404,7 @@ impl SummaryService {
             token_threshold,
             &model_provider,
             &model_name,
-            ollama_endpoint.as_deref(),
+            None, // ollama_endpoint (legacy cache-source field, always None now)
             custom_openai_endpoint.as_deref(),
             custom_openai_max_tokens,
             custom_openai_temperature,
@@ -515,12 +449,10 @@ impl SummaryService {
             &template_id,
             &template,
             token_threshold,
-            ollama_endpoint.as_deref(),
             custom_openai_endpoint.as_deref(),
             custom_openai_max_tokens,
             custom_openai_temperature,
             custom_openai_top_p,
-            app_data_dir.as_ref(),
             Some(&cancellation_token),
             summary_language.as_deref(),
             detected_summary_language.as_deref(),

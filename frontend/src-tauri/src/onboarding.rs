@@ -173,25 +173,25 @@ pub async fn complete_onboarding<R: Runtime>(
     state: tauri::State<'_, AppState>,
     model: String,
 ) -> Result<(), String> {
-    info!("Completing onboarding with builtin-ai model: {}", model);
+    info!("Completing onboarding with summary model: {}", model);
 
     // Step 1: Save model configuration to SQLite database FIRST
     let pool = state.db_manager.pool();
 
-    // Onboarding always uses builtin-ai (local LLM)
+    // Onboarding uses the cloud summary provider (the frontend sends the Claude model)
     if let Err(e) = SettingsRepository::save_model_config(
         pool,
-        "builtin-ai",
+        crate::config::DEFAULT_SUMMARY_PROVIDER,
         &model,
-        "large-v3",
+        "",
         None,
     ).await {
-        error!("Failed to save builtin-ai model config: {}", e);
-        return Err(format!("Failed to save builtin-ai model config: {}", e));
+        error!("Failed to save summary model config: {}", e);
+        return Err(format!("Failed to save summary model config: {}", e));
     }
-    info!("Saved builtin-ai model config: model={}", model);
+    info!("Saved summary model config: provider={}, model={}", crate::config::DEFAULT_SUMMARY_PROVIDER, model);
 
-    // Save transcription model config (this build defaults to local Whisper)
+    // Save transcription model config (cloud ASR provider)
     let (default_provider, default_model) = crate::config::default_provider_and_model();
     if let Err(e) = SettingsRepository::save_transcript_config(
         pool,
@@ -210,8 +210,9 @@ pub async fn complete_onboarding<R: Runtime>(
 
     status.completed = true;
     status.current_step = 4; // Max step (4 on macOS with permissions, 3 on other platforms)
-    status.model_status.parakeet = "downloaded".to_string();
-    status.model_status.summary = "downloaded".to_string();
+    // API-only build: no local models to download (struct kept for serde compat)
+    status.model_status.parakeet = "not_applicable".to_string();
+    status.model_status.summary = "not_applicable".to_string();
     status.model_status.selected_summary_model = Some(model.clone());
 
     save_onboarding_status(&app, &status)

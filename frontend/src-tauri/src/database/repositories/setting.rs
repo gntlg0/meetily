@@ -24,8 +24,8 @@ pub struct SaveTranscriptConfigRequest {
 
 pub struct SettingsRepository;
 
-// Transcript providers: localWhisper, deepgram, elevenLabs, groq, openai
-// Summary providers: openai, claude, ollama, groq, added openrouter
+// Transcript providers: deepgram, elevenLabs, groq, openai (localWhisper/parakeet are legacy)
+// Summary providers: openai, claude, groq, openrouter (ollama/builtin-ai are legacy)
 // NOTE: Handle data exclusion in the higher layer as this is database abstraction layer(using SELECT *)
 
 impl SettingsRepository {
@@ -82,10 +82,11 @@ impl SettingsRepository {
         let api_key_column = match provider {
             "openai" => "openaiApiKey",
             "claude" => "anthropicApiKey",
-            "ollama" => "ollamaApiKey",
             "groq" => "groqApiKey",
             "openrouter" => "openRouterApiKey",
-            "builtin-ai" => return Ok(()), // No API key needed
+            // Legacy local summary providers (removed) — old databases may still
+            // reference them; accept the call gracefully as a no-op.
+            "ollama" | "builtin-ai" => return Ok(()),
             _ => {
                 return Err(sqlx::Error::Protocol(
                     format!("Invalid provider: {}", provider).into(),
@@ -119,11 +120,12 @@ impl SettingsRepository {
 
         let api_key_column = match provider {
             "openai" => "openaiApiKey",
-            "ollama" => "ollamaApiKey",
             "groq" => "groqApiKey",
             "claude" => "anthropicApiKey",
             "openrouter" => "openRouterApiKey",
-            "builtin-ai" => return Ok(None), // No API key needed
+            // Legacy local summary providers (removed) — old databases may still
+            // reference them; report no key gracefully.
+            "ollama" | "builtin-ai" => return Ok(None),
             _ => {
                 return Err(sqlx::Error::Protocol(
                     format!("Invalid provider: {}", provider).into(),
@@ -178,8 +180,9 @@ impl SettingsRepository {
         api_key: &str,
     ) -> std::result::Result<(), sqlx::Error> {
         let api_key_column = match provider {
-            "localWhisper" => "whisperApiKey",
-            "parakeet" => return Ok(()), // Parakeet doesn't need an API key, return early
+            // Legacy local transcription providers (removed) — old databases may
+            // still reference them; accept the call gracefully as a no-op.
+            "localWhisper" | "parakeet" => return Ok(()),
             "deepgram" => "deepgramApiKey",
             "elevenLabs" => "elevenLabsApiKey",
             "groq" => "groqApiKey",
@@ -191,14 +194,15 @@ impl SettingsRepository {
             }
         };
 
+        let (default_provider, default_model) = crate::config::default_provider_and_model();
         let query = format!(
             r#"
             INSERT INTO transcript_settings (id, provider, model, "{}")
-            VALUES ('1', 'parakeet', '{}', $1)
+            VALUES ('1', '{}', '{}', $1)
             ON CONFLICT(id) DO UPDATE SET
                 "{}" = $1
             "#,
-            api_key_column, crate::config::DEFAULT_PARAKEET_MODEL, api_key_column
+            api_key_column, default_provider, default_model, api_key_column
         );
         sqlx::query(&query).bind(api_key).execute(pool).await?;
 
@@ -210,8 +214,9 @@ impl SettingsRepository {
         provider: &str,
     ) -> std::result::Result<Option<String>, sqlx::Error> {
         let api_key_column = match provider {
-            "localWhisper" => "whisperApiKey",
-            "parakeet" => return Ok(None), // Parakeet doesn't need an API key
+            // Legacy local transcription providers (removed) — old databases may
+            // still reference them; report no key gracefully.
+            "localWhisper" | "parakeet" => return Ok(None),
             "deepgram" => "deepgramApiKey",
             "elevenLabs" => "elevenLabsApiKey",
             "groq" => "groqApiKey",
@@ -245,11 +250,12 @@ impl SettingsRepository {
 
         let api_key_column = match provider {
             "openai" => "openaiApiKey",
-            "ollama" => "ollamaApiKey",
             "groq" => "groqApiKey",
             "claude" => "anthropicApiKey",
             "openrouter" => "openRouterApiKey",
-            "builtin-ai" => return Ok(()), // No API key needed
+            // Legacy local summary providers (removed) — old databases may still
+            // reference them; accept the call gracefully as a no-op.
+            "ollama" | "builtin-ai" => return Ok(()),
             _ => {
                 return Err(sqlx::Error::Protocol(
                     format!("Invalid provider: {}", provider).into(),

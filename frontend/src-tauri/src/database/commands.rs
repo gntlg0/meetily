@@ -1,10 +1,46 @@
 use log::{error, info};
 use serde::Serialize;
+use sqlx::SqlitePool;
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager};
 
 use super::manager::DatabaseManager;
 use crate::state::AppState;
+
+/// Migrate legacy local-model provider settings to the API-only defaults.
+///
+/// Old databases may reference the removed local providers
+/// (localWhisper/parakeet/whisper for transcription, ollama/builtin-ai for
+/// summaries). Rewrite them to the current cloud defaults so provider routing
+/// never sees a removed provider. Harmless on fresh databases (no rows match).
+pub async fn migrate_legacy_local_providers(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    let transcript_update = format!(
+        "UPDATE transcript_settings SET provider='{}', model='{}' \
+         WHERE provider IN ('localWhisper','parakeet','whisper')",
+        crate::config::DEFAULT_TRANSCRIPTION_PROVIDER,
+        crate::config::DEFAULT_TRANSCRIPTION_MODEL,
+    );
+    let transcript_result = sqlx::query(&transcript_update).execute(pool).await?;
+
+    // Summary/model config lives in the `settings` table (see SettingsRepository).
+    let summary_update = format!(
+        "UPDATE settings SET provider='{}', model='{}' \
+         WHERE provider IN ('ollama','builtin-ai')",
+        crate::config::DEFAULT_SUMMARY_PROVIDER,
+        crate::config::DEFAULT_SUMMARY_MODEL,
+    );
+    let summary_result = sqlx::query(&summary_update).execute(pool).await?;
+
+    if transcript_result.rows_affected() > 0 || summary_result.rows_affected() > 0 {
+        info!(
+            "Migrated legacy local providers to API defaults ({} transcript row(s), {} summary row(s))",
+            transcript_result.rows_affected(),
+            summary_result.rows_affected()
+        );
+    }
+
+    Ok(())
+}
 
 #[derive(Serialize)]
 pub struct DatabaseCheckResult {
@@ -160,6 +196,11 @@ pub async fn import_and_initialize_database(
             format!("Failed to import database: {}", e)
         })?;
 
+    // Migrate any legacy local-model provider settings in the imported database
+    if let Err(e) = migrate_legacy_local_providers(db_manager.pool()).await {
+        error!("Failed to migrate legacy local providers: {}", e);
+    }
+
     // Update app state with the new manager
     app.manage(AppState { db_manager });
 
@@ -189,22 +230,19 @@ pub async fn initialize_fresh_database(app: AppHandle) -> Result<(), String> {
 
     // Set default model configuration for fresh installs
     let pool = db_manager.pool();
-    
-    let default_summary_model = crate::summary::summary_engine::commands::get_recommended_summary_model_for_current_system()
-        .unwrap_or("qwen3.5:2b");
 
-    // Default Summary Model: Built-in AI (Qwen recommendation for this system)
+    // Default Summary Model: cloud API (Anthropic)
     if let Err(e) = crate::database::repositories::setting::SettingsRepository::save_model_config(
         pool,
-        "builtin-ai",
-        default_summary_model,
-        "large-v3", // Default whisper model (unused for builtin but required)
+        crate::config::DEFAULT_SUMMARY_PROVIDER,
+        crate::config::DEFAULT_SUMMARY_MODEL,
+        "", // No local whisper model in the API-only build
         None,
     ).await {
         error!("Failed to set default summary model config: {}", e);
     }
 
-    // Default Transcription Model (this build: local Whisper with the Mongolian model)
+    // Default Transcription Model: cloud ASR provider
     let (default_provider, default_model) = crate::config::default_provider_and_model();
     if let Err(e) = crate::database::repositories::setting::SettingsRepository::save_transcript_config(
         pool,
@@ -212,6 +250,11 @@ pub async fn initialize_fresh_database(app: AppHandle) -> Result<(), String> {
         default_model,
     ).await {
         error!("Failed to set default transcription model config: {}", e);
+    }
+
+    // Rewrite any legacy local-model provider strings (harmless on fresh DBs)
+    if let Err(e) = migrate_legacy_local_providers(pool).await {
+        error!("Failed to migrate legacy local providers: {}", e);
     }
 
     info!("Fresh database initialized successfully with default models");

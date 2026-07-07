@@ -3,7 +3,6 @@ use crate::summary::templates::Template;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::Client;
-use std::path::PathBuf;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
@@ -304,13 +303,11 @@ pub fn extract_meeting_name_from_markdown(markdown: &str) -> Option<String> {
 /// * `text` - Full transcript text to summarize
 /// * `custom_prompt` - Optional user-provided context
 /// * `template_id` - Template identifier (e.g., "daily_standup", "standard_meeting")
-/// * `token_threshold` - Token limit for single-pass processing (default 4000)
-/// * `ollama_endpoint` - Optional custom Ollama endpoint
+/// * `token_threshold` - Token limit for single-pass processing
 /// * `custom_openai_endpoint` - Optional custom OpenAI-compatible endpoint
 /// * `max_tokens` - Optional max tokens for completion (CustomOpenAI provider)
 /// * `temperature` - Optional temperature (CustomOpenAI provider)
 /// * `top_p` - Optional top_p (CustomOpenAI provider)
-/// * `app_data_dir` - Optional app data directory (BuiltInAI provider)
 /// * `cancellation_token` - Optional cancellation token to stop processing
 /// * `summary_language` - Optional BCP-47 tag (e.g. "en-GB") to force summary output language
 /// * `detected_transcript_language` - Optional detected transcript language BCP-47 tag
@@ -330,12 +327,10 @@ pub async fn generate_meeting_summary(
     template_id: &str,
     template: &Template,
     token_threshold: usize,
-    ollama_endpoint: Option<&str>,
     custom_openai_endpoint: Option<&str>,
     max_tokens: Option<u32>,
     temperature: Option<f32>,
     top_p: Option<f32>,
-    app_data_dir: Option<&PathBuf>,
     cancellation_token: Option<&CancellationToken>,
     summary_language: Option<&str>,
     detected_transcript_language: Option<&str>,
@@ -363,10 +358,9 @@ pub async fn generate_meeting_summary(
         let content_to_summarize: String;
         let successful_chunk_count: i64;
 
-        // Strategy: Use single-pass for cloud providers or short transcripts
-        // Use multi-level chunking for Ollama/BuiltInAI with long transcripts
-        // Note: CustomOpenAI is treated like cloud providers (unlimited context)
-        if (provider != &LLMProvider::Ollama && provider != &LLMProvider::BuiltInAI) || total_tokens < token_threshold {
+        // Strategy: Use single-pass for transcripts under the context threshold;
+        // fall back to multi-level chunking for extremely long transcripts.
+        if total_tokens < token_threshold {
             info!(
                 "Using single-pass summarization (tokens: {}, threshold: {})",
                 total_tokens, token_threshold
@@ -406,12 +400,10 @@ pub async fn generate_meeting_summary(
                     api_key,
                     system_prompt_chunk,
                     &user_prompt_chunk,
-                    ollama_endpoint,
                     custom_openai_endpoint,
                     max_tokens,
                     temperature,
                     top_p,
-                    app_data_dir,
                     cancellation_token,
                 )
                 .await
@@ -459,12 +451,10 @@ pub async fn generate_meeting_summary(
                     api_key,
                     system_prompt_combine,
                     &user_prompt_combine,
-                    ollama_endpoint,
                     custom_openai_endpoint,
                     max_tokens,
                     temperature,
                     top_p,
-                    app_data_dir,
                     cancellation_token,
                 )
                 .await?
@@ -507,12 +497,10 @@ pub async fn generate_meeting_summary(
             api_key,
             &final_system_prompt,
             &final_user_prompt,
-            ollama_endpoint,
             custom_openai_endpoint,
             max_tokens,
             temperature,
             top_p,
-            app_data_dir,
             cancellation_token,
         )
         .await?;
@@ -532,12 +520,10 @@ pub async fn generate_meeting_summary(
                 api_key,
                 &english_markdown,
                 name,
-                ollama_endpoint,
                 custom_openai_endpoint,
                 max_tokens,
                 temperature,
                 top_p,
-                app_data_dir,
                 cancellation_token,
             )
             .await
@@ -559,12 +545,10 @@ pub async fn generate_meeting_summary(
                     model_name,
                     api_key,
                     &english_markdown,
-                    ollama_endpoint,
                     custom_openai_endpoint,
                     max_tokens,
                     temperature,
                     top_p,
-                    app_data_dir,
                     cancellation_token,
                 )
                 .await,
@@ -588,12 +572,10 @@ async fn run_markdown_transform(
     system_prompt: &str,
     user_prompt: &str,
     failure_label: &str,
-    ollama_endpoint: Option<&str>,
     custom_openai_endpoint: Option<&str>,
     max_tokens: Option<u32>,
     temperature: Option<f32>,
     top_p: Option<f32>,
-    app_data_dir: Option<&PathBuf>,
     cancellation_token: Option<&CancellationToken>,
 ) -> Result<String, String> {
     if let Some(token) = cancellation_token {
@@ -609,12 +591,10 @@ async fn run_markdown_transform(
         api_key,
         system_prompt,
         user_prompt,
-        ollama_endpoint,
         custom_openai_endpoint,
         max_tokens,
         temperature,
         top_p,
-        app_data_dir,
         cancellation_token,
     )
     .await
@@ -631,12 +611,10 @@ async fn translate_markdown(
     api_key: &str,
     english_markdown: &str,
     target_language: &str,
-    ollama_endpoint: Option<&str>,
     custom_openai_endpoint: Option<&str>,
     max_tokens: Option<u32>,
     temperature: Option<f32>,
     top_p: Option<f32>,
-    app_data_dir: Option<&PathBuf>,
     cancellation_token: Option<&CancellationToken>,
 ) -> Result<String, String> {
     info!("Translation pass: target language = {}", target_language);
@@ -654,12 +632,10 @@ async fn translate_markdown(
         &system_prompt,
         &user_prompt,
         "Translation pass",
-        ollama_endpoint,
         custom_openai_endpoint,
         max_tokens,
         temperature,
         top_p,
-        app_data_dir,
         cancellation_token,
     )
     .await
@@ -672,12 +648,10 @@ async fn normalize_markdown_to_english(
     model_name: &str,
     api_key: &str,
     markdown: &str,
-    ollama_endpoint: Option<&str>,
     custom_openai_endpoint: Option<&str>,
     max_tokens: Option<u32>,
     temperature: Option<f32>,
     top_p: Option<f32>,
-    app_data_dir: Option<&PathBuf>,
     cancellation_token: Option<&CancellationToken>,
 ) -> Result<String, String> {
     info!("English normalization pass: preserving Markdown structure");
@@ -694,12 +668,10 @@ async fn normalize_markdown_to_english(
         english_normalization_system_prompt(),
         &user_prompt,
         "English normalization pass",
-        ollama_endpoint,
         custom_openai_endpoint,
         max_tokens,
         temperature,
         top_p,
-        app_data_dir,
         cancellation_token,
     )
     .await

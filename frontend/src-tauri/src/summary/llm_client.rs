@@ -1,6 +1,5 @@
 use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
@@ -63,15 +62,13 @@ pub struct ClaudeChatContent {
     pub text: String,
 }
 
-/// LLM Provider enumeration for multi-provider support
+/// LLM Provider enumeration for multi-provider support (API providers only)
 #[derive(Debug, Clone, PartialEq)]
 pub enum LLMProvider {
     OpenAI,
     Claude,
     Groq,
-    Ollama,
     OpenRouter,
-    BuiltInAI,
     CustomOpenAI,
 }
 
@@ -82,10 +79,14 @@ impl LLMProvider {
             "openai" => Ok(Self::OpenAI),
             "claude" => Ok(Self::Claude),
             "groq" => Ok(Self::Groq),
-            "ollama" => Ok(Self::Ollama),
             "openrouter" => Ok(Self::OpenRouter),
-            "builtin-ai" | "local-llama" | "localllama" => Ok(Self::BuiltInAI),
             "custom-openai" => Ok(Self::CustomOpenAI),
+            // Legacy local providers were removed in the API-only build
+            "ollama" | "builtin-ai" | "local-llama" | "localllama" => Err(
+                "Local summary providers were removed; choose an API provider \
+                 (claude/groq/openai/openrouter) in Settings"
+                    .to_string(),
+            ),
             _ => Err(format!("Unsupported LLM provider: {}", s)),
         }
     }
@@ -97,15 +98,13 @@ impl LLMProvider {
 /// * `client` - Reqwest HTTP client (reused for performance)
 /// * `provider` - The LLM provider to use
 /// * `model_name` - The specific model to use (e.g., "gpt-4", "claude-3-opus")
-/// * `api_key` - API key for the provider (not needed for Ollama)
+/// * `api_key` - API key for the provider
 /// * `system_prompt` - System instructions for the LLM
 /// * `user_prompt` - User query/content to process
-/// * `ollama_endpoint` - Optional custom Ollama endpoint (defaults to localhost:11434)
 /// * `custom_openai_endpoint` - Optional custom OpenAI-compatible endpoint
 /// * `max_tokens` - Optional max tokens (for CustomOpenAI provider)
 /// * `temperature` - Optional temperature (for CustomOpenAI provider)
 /// * `top_p` - Optional top_p (for CustomOpenAI provider)
-/// * `app_data_dir` - Optional app data directory (for BuiltInAI provider)
 /// * `cancellation_token` - Optional token to cancel the request
 ///
 /// # Returns
@@ -117,12 +116,10 @@ pub async fn generate_summary(
     api_key: &str,
     system_prompt: &str,
     user_prompt: &str,
-    ollama_endpoint: Option<&str>,
     custom_openai_endpoint: Option<&str>,
     max_tokens: Option<u32>,
     temperature: Option<f32>,
     top_p: Option<f32>,
-    app_data_dir: Option<&PathBuf>,
     cancellation_token: Option<&CancellationToken>,
 ) -> Result<String, String> {
     // Check if cancelled before starting
@@ -130,22 +127,6 @@ pub async fn generate_summary(
         if token.is_cancelled() {
             return Err("Summary generation was cancelled".to_string());
         }
-    }
-
-    // Handle BuiltInAI provider separately (uses local sidecar, no HTTP API)
-    if provider == &LLMProvider::BuiltInAI {
-        let app_data_dir = app_data_dir
-            .ok_or_else(|| "app_data_dir is required for BuiltInAI provider".to_string())?;
-
-        return crate::summary::summary_engine::generate_with_builtin(
-            app_data_dir,
-            model_name,
-            system_prompt,
-            user_prompt,
-            cancellation_token,
-        )
-        .await
-        .map_err(|e| e.to_string());
     }
 
     let (api_url, mut headers) = match provider {
@@ -161,15 +142,6 @@ pub async fn generate_summary(
             "https://openrouter.ai/api/v1/chat/completions".to_string(),
             header::HeaderMap::new(),
         ),
-        LLMProvider::Ollama => {
-            let host = ollama_endpoint
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "http://localhost:11434".to_string());
-            (
-                format!("{}/v1/chat/completions", host),
-                header::HeaderMap::new(),
-            )
-        }
         LLMProvider::CustomOpenAI => {
             let endpoint = custom_openai_endpoint
                 .ok_or_else(|| "Custom OpenAI endpoint not configured".to_string())?;
@@ -193,10 +165,6 @@ pub async fn generate_summary(
                     .map_err(|_| "Invalid anthropic version".to_string())?,
             );
             ("https://api.anthropic.com/v1/messages".to_string(), header_map)
-        }
-        LLMProvider::BuiltInAI => {
-            // This case is handled earlier with early returns
-            unreachable!("BuiltInAI is handled before this match statement")
         }
     };
 
@@ -338,8 +306,6 @@ fn provider_name(provider: &LLMProvider) -> &str {
         LLMProvider::OpenAI => "OpenAI",
         LLMProvider::Claude => "Claude",
         LLMProvider::Groq => "Groq",
-        LLMProvider::Ollama => "Ollama",
-        LLMProvider::BuiltInAI => "Built-in AI",
         LLMProvider::OpenRouter => "OpenRouter",
         LLMProvider::CustomOpenAI => "Custom OpenAI",
     }
