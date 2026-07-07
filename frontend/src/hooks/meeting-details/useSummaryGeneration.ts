@@ -6,44 +6,38 @@ import { invoke as invokeTauri } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import Analytics from '@/lib/analytics';
 import {
-  detectAndCacheSummaryLanguage,
   readMeetingSummaryLanguage,
-  readCachedDetectedSummaryLanguage,
+  readPinnedSummaryLanguageDefault,
 } from '@/lib/summary-language-preferences';
+
+// This build's default summary output language. Meetings are Mongolian, so
+// summaries are generated in Mongolian unless a meeting is explicitly pinned
+// to another language. (Auto-detection from the transcript was unreliable on
+// mixed / partly-garbled transcripts and let summaries fall back to English.)
+const DEFAULT_SUMMARY_OUTPUT_LANGUAGE = 'mn';
 
 async function resolveSummaryLanguage(
   meetingId: string,
-  transcriptTexts: string[]
+  _transcriptTexts: string[]
 ): Promise<string | null> {
+  // 1. Explicit per-meeting pin wins (set via the summary language picker).
   try {
     const perMeeting = await readMeetingSummaryLanguage(meetingId);
     if (perMeeting.language) return perMeeting.language;
   } catch (err) {
     console.warn('Failed to load meeting summary language:', err);
-    toast.warning('Could not load saved summary language', {
-      description: 'Using Auto for this generation.',
-    });
   }
 
+  // 2. Global pinned default from Settings, if any.
   try {
-    const cachedDetected = await readCachedDetectedSummaryLanguage(meetingId);
-    if (cachedDetected) return cachedDetected;
+    const globalDefault = readPinnedSummaryLanguageDefault();
+    if (globalDefault) return globalDefault;
   } catch (err) {
-    console.warn('Failed to load cached detected summary language:', err);
+    console.warn('Failed to load global summary language default:', err);
   }
 
-  try {
-    const detection = await detectAndCacheSummaryLanguage(meetingId, transcriptTexts);
-    if (detection.reason === 'tie') {
-      toast.warning('Bilingual transcript detected', {
-        description: 'Pick a summary language manually if Auto chooses the wrong fallback.',
-      });
-    }
-    return detection.language;
-  } catch (err) {
-    console.warn('Failed to detect transcript summary language:', err);
-    return null;
-  }
+  // 3. This build's default: Mongolian.
+  return DEFAULT_SUMMARY_OUTPUT_LANGUAGE;
 }
 
 type SummaryStatus = 'idle' | 'processing' | 'summarizing' | 'regenerating' | 'completed' | 'error';

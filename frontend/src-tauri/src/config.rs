@@ -14,10 +14,11 @@ pub const DEFAULT_TRANSCRIPTION_PROVIDER: &str = "elevenLabs";
 pub const DEFAULT_TRANSCRIPTION_MODEL: &str = "scribe_v2";
 
 /// Default transcription language (ISO 639-1, or "auto"/"auto-translate").
-/// "auto" lets the cloud provider detect the language — appropriate for
-/// ElevenLabs Scribe (strong low-resource detection) and for mixed
-/// Mongolian/English meetings where a single forced code isn't ideal.
-pub const DEFAULT_TRANSCRIPTION_LANGUAGE: &str = "auto";
+/// Forced to Mongolian: the app sends per-VAD-segment requests, and on short
+/// segments provider-side "auto" detection misfires into Russian/Korean/etc.
+/// Pinning `mn` keeps detection stable; ElevenLabs Scribe still transcribes
+/// embedded English words in English (code-switching). Overridable per import.
+pub const DEFAULT_TRANSCRIPTION_LANGUAGE: &str = "mn";
 
 /// Default summary provider/model (Anthropic API).
 pub const DEFAULT_SUMMARY_PROVIDER: &str = "claude";

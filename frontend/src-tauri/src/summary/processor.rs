@@ -116,12 +116,14 @@ pub(crate) fn language_name_from_code(code: &str) -> Option<&'static str> {
         "no" => Some("Norwegian"),
         "ro" => Some("Romanian"),
         "uk" => Some("Ukrainian"),
+        "mn" => Some("Mongolian"),
+        "kk" => Some("Kazakh"),
         _ => None,
     }
 }
 
 fn translation_system_prompt(target_language: &str) -> String {
-    format!(
+    let mut prompt = format!(
         r#"You are a precise translator. Translate the provided Markdown document into {target_language} while preserving structure exactly.
 
 **CRITICAL RULES:**
@@ -130,7 +132,22 @@ fn translation_system_prompt(target_language: &str) -> String {
 3. Do NOT translate: proper nouns (names of people, products, companies), code identifiers, file paths, URLs, numeric values, or text inside backticks.
 4. Do not add commentary or explanation. Output ONLY the translated Markdown.
 5. If a technical term has no standard translation, keep the original English word."#
-    )
+    );
+
+    if target_language == "Mongolian" {
+        prompt.push_str(
+            r#"
+
+**MONGOLIAN STYLE — write like a Mongolian professional actually talks, not machine translation:**
+- Keep English technical and business terms in English (commit, deploy, API, webhook, backend, deadline, roadmap, meeting, bug, release, prod). Mixing English terms into Mongolian is normal and reads better than forced Mongolian equivalents.
+- Use natural connectors ("Үүний улмаас…", "Товчхондоо…", "Дашрамд…", "Гэтэл…", "Тухайлбал…") instead of robotic labels like "Үр дагавар:", "Үндэслэл:", "Нэмэлт эрсдэл:".
+- Use natural, consistent Mongolian past tense (-сан/-сэн, -жээ/-сан байна) — not a literal "хийсэн" on every line.
+- Vary word choice; do not repeat the same verb ("баталгаажуулах", "дамжуулах") in every sentence.
+- Read each sentence back: if it sounds like Google Translate, rewrite it the way a native speaker would actually say it."#,
+        );
+    }
+
+    prompt
 }
 
 fn build_chunk_summary_user_prompt(chunk: &str) -> String {
@@ -695,6 +712,21 @@ mod tests {
 
         assert!(prompt.contains(ENGLISH_BASE_SUMMARY_INSTRUCTION));
         assert!(prompt.contains("<summaries>"));
+    }
+
+    #[test]
+    fn mongolian_routes_to_translation_with_style_guidance() {
+        // The bug: "mn" was not mapped, so summaries normalized to English.
+        assert_eq!(language_name_from_code("mn"), Some("Mongolian"));
+
+        match resolve_final_language_action(Some("mn"), Some("mn")) {
+            FinalLanguageAction::Translate(name) => assert_eq!(name, "Mongolian"),
+            other => panic!("expected Translate(Mongolian), got {:?}", other),
+        }
+
+        let prompt = translation_system_prompt("Mongolian");
+        assert!(prompt.contains("MONGOLIAN STYLE"));
+        assert!(prompt.contains("commit"));
     }
 
     #[test]
