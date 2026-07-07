@@ -57,9 +57,17 @@ pub struct ClaudeChatResponse {
     pub content: Vec<ClaudeChatContent>,
 }
 
+// A Claude content block. The Messages API interleaves block types
+// ("text", "thinking", "tool_use", ...); only "text" blocks carry a `text`
+// field, so it must be optional or deserialization fails the whole response
+// with "missing field `text`" the moment a non-text block appears (e.g. a
+// thinking block from reasoning-capable models).
 #[derive(Deserialize, Debug)]
 pub struct ClaudeChatContent {
-    pub text: String,
+    #[serde(rename = "type", default)]
+    pub block_type: Option<String>,
+    #[serde(default)]
+    pub text: Option<String>,
 }
 
 /// LLM Provider enumeration for multi-provider support (API providers only)
@@ -274,13 +282,19 @@ pub async fn generate_summary(
 
         info!("🐞 LLM Response received from Claude");
 
+        // Concatenate every text block, ignoring thinking/tool_use blocks.
         let content = chat_response
             .content
-            .get(0)
-            .ok_or("No content in LLM response")?
-            .text
-            .trim();
-        Ok(content.to_string())
+            .iter()
+            .filter_map(|block| block.text.as_deref())
+            .collect::<Vec<_>>()
+            .join("")
+            .trim()
+            .to_string();
+        if content.is_empty() {
+            return Err("No text content in LLM response".to_string());
+        }
+        Ok(content)
     } else {
         let chat_response = response
             .json::<ChatResponse>()
@@ -308,5 +322,39 @@ fn provider_name(provider: &LLMProvider) -> &str {
         LLMProvider::Groq => "Groq",
         LLMProvider::OpenRouter => "OpenRouter",
         LLMProvider::CustomOpenAI => "Custom OpenAI",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A reasoning-capable model returns a thinking block before the text
+    // block; the parser must skip the thinking block and return the text.
+    #[test]
+    fn parses_claude_response_with_thinking_block() {
+        let body = r#"{
+            "content": [
+                {"type": "thinking", "thinking": "Let me summarize the meeting..."},
+                {"type": "text", "text": "Summary: the team discussed the roadmap."}
+            ]
+        }"#;
+        let resp: ClaudeChatResponse = serde_json::from_str(body).expect("should parse");
+        let text: String = resp
+            .content
+            .iter()
+            .filter_map(|b| b.text.as_deref())
+            .collect::<Vec<_>>()
+            .join("")
+            .trim()
+            .to_string();
+        assert_eq!(text, "Summary: the team discussed the roadmap.");
+    }
+
+    #[test]
+    fn parses_plain_claude_text_response() {
+        let body = r#"{"content":[{"type":"text","text":"Hello"}]}"#;
+        let resp: ClaudeChatResponse = serde_json::from_str(body).expect("should parse");
+        assert_eq!(resp.content[0].text.as_deref(), Some("Hello"));
     }
 }
