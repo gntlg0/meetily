@@ -6,6 +6,13 @@ use tracing::info;
 
 const REQUEST_TIMEOUT_DURATION: Duration = Duration::from_secs(300);
 
+/// Max output tokens for Claude requests. A full meeting note (multiple
+/// discussion topics + decisions + a task table), written in Mongolian
+/// Cyrillic (which is token-heavier than English), easily exceeds a few
+/// thousand tokens — 2048 truncated summaries mid-document. This is an upper
+/// bound; short summaries stop well before it.
+const CLAUDE_MAX_OUTPUT_TOKENS: u32 = 16384;
+
 // Generic structure for OpenAI-compatible API chat messages
 #[derive(Debug, Serialize)]
 pub struct ChatMessage {
@@ -221,7 +228,7 @@ pub async fn generate_summary(
         serde_json::json!(ClaudeRequest {
             system: system_prompt.to_string(),
             model: model_name.to_string(),
-            max_tokens: 2048,
+            max_tokens: max_tokens.unwrap_or(CLAUDE_MAX_OUTPUT_TOKENS),
             messages: vec![ChatMessage {
                 role: "user".to_string(),
                 content: user_prompt.to_string(),
