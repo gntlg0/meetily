@@ -1,32 +1,17 @@
 /**
- * Default model names for transcription engines.
+ * Default transcription configuration.
+ *
+ * This build is API-only: no local models (Whisper/Parakeet/Ollama) exist.
+ * Transcription goes through a cloud ASR provider (integration in progress —
+ * see NOTES.md); summaries go through cloud LLM APIs (Anthropic by default).
+ *
  * IMPORTANT: Keep in sync with Rust constants in src-tauri/src/config.rs
  */
+export const DEFAULT_TRANSCRIPTION_PROVIDER = 'elevenLabs';
+export const DEFAULT_TRANSCRIPTION_MODEL = 'scribe_v1';
 
 /**
- * Default Whisper model for transcription when no preference is configured.
- * This build defaults to the Mongolian fine-tune (see NOTES-MN.md).
+ * Default summary provider/model (Anthropic API).
  */
-export const DEFAULT_WHISPER_MODEL = 'mn-large-v2-q5_0';
-
-/**
- * Default transcription provider for this build. Parakeet is English-only,
- * so the Mongolian build routes to local Whisper by default.
- * IMPORTANT: Keep in sync with DEFAULT_TRANSCRIPTION_PROVIDER in src-tauri/src/config.rs
- */
-export const DEFAULT_TRANSCRIPTION_PROVIDER = 'localWhisper';
-
-/**
- * Default Parakeet model for transcription when no preference is configured.
- * This is the quantized version optimized for speed.
- */
-export const DEFAULT_PARAKEET_MODEL = 'parakeet-tdt-0.6b-v3-int8';
-
-/**
- * Model defaults by provider type
- */
-export const MODEL_DEFAULTS = {
-  whisper: DEFAULT_WHISPER_MODEL,
-  localWhisper: DEFAULT_WHISPER_MODEL,
-  parakeet: DEFAULT_PARAKEET_MODEL,
-} as const;
+export const DEFAULT_SUMMARY_PROVIDER = 'claude';
+export const DEFAULT_SUMMARY_MODEL = 'claude-sonnet-4-5-20250929';

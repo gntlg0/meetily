@@ -2,9 +2,8 @@ import React, { useEffect } from 'react';
 import { useOnboarding } from '@/contexts/OnboardingContext';
 import {
   WelcomeStep,
+  ApiKeysStep,
   PermissionsStep,
-  DownloadProgressStep,
-  SetupOverviewStep,
 } from './steps';
 
 interface OnboardingFlowProps {
@@ -31,18 +30,16 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     checkPlatform();
   }, []);
 
-  // 4-Step Onboarding Flow (System-Recommended Models):
+  // API-only Onboarding Flow (no local models):
   // Step 1: Welcome - Introduce Meetily features
-  // Step 2: Setup Overview - Database initialization + show recommended downloads
-  // Step 3: Download Progress - Download Parakeet + Summary Model (auto-selected based on platform/RAM)
-  // Step 4: Permissions - Request mic + system audio (macOS only)
+  // Step 2: API Keys - Anthropic key for summaries; cloud ASR set up in Settings
+  // Step 3: Permissions - Request mic + system audio (macOS only)
 
   return (
     <div className="onboarding-flow">
       {currentStep === 1 && <WelcomeStep />}
-      {currentStep === 2 && <SetupOverviewStep />}
-      {currentStep === 3 && <DownloadProgressStep />}
-      {currentStep === 4 && isMac && <PermissionsStep />}
+      {currentStep === 2 && <ApiKeysStep />}
+      {currentStep === 3 && isMac && <PermissionsStep />}
     </div>
   );
 }

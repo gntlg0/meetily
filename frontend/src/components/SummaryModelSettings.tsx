@@ -14,8 +14,8 @@ interface SummaryModelSettingsProps {
 
 export function SummaryModelSettings({ refetchTrigger }: SummaryModelSettingsProps) {
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
-    provider: 'ollama',
-    model: 'llama3.2:latest',
+    provider: 'claude',
+    model: 'claude-sonnet-4-5-20250929',
     whisperModel: 'large-v3',
     apiKey: null,
     ollamaEndpoint: null
@@ -29,7 +29,7 @@ export function SummaryModelSettings({ refetchTrigger }: SummaryModelSettingsPro
       const data = await invoke('api_get_model_config') as any;
       if (data && data.provider !== null) {
         // Fetch API key if not included and provider requires it
-        if (data.provider !== 'ollama' && data.provider !== 'builtin-ai' && !data.apiKey) {
+        if (!data.apiKey) {
           try {
             const apiKeyData = await invoke('api_get_api_key', {
               provider: data.provider

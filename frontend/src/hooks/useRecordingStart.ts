@@ -49,47 +49,17 @@ export function useRecordingStart(
     return `Meeting ${day}_${month}_${year}_${hours}_${minutes}_${seconds}`;
   }, []);
 
-  // Check if the configured transcription provider's model is ready
+  // API-only build: transcription uses a cloud provider, so there is no local
+  // model to verify before recording. Recording always proceeds; transcription
+  // errors (e.g. provider not configured) surface via transcription-error events.
   const checkTranscriptionReady = useCallback(async (): Promise<boolean> => {
-    const { provider, model } = transcriptModelConfig;
-    try {
-      if (provider === 'parakeet') {
-        await invoke('parakeet_init');
-        return await invoke<boolean>('parakeet_has_available_models');
-      }
-      if (provider === 'localWhisper') {
-        const models = await invoke<any[]>('whisper_get_available_models');
-        const configured = models.find((m) => m.name === model);
-        return !!configured && configured.status === 'Available';
-      }
-      // Cloud providers: no local model to check
-      return true;
-    } catch (error) {
-      console.error(`Failed to check ${provider} status:`, error);
-      return false;
-    }
-  }, [transcriptModelConfig]);
+    return true;
+  }, []);
 
-  // Check if any model of the configured provider is currently downloading
+  // No local model downloads exist in this build.
   const checkIfModelDownloading = useCallback(async (): Promise<boolean> => {
-    try {
-      const command = transcriptModelConfig.provider === 'parakeet'
-        ? 'parakeet_get_available_models'
-        : 'whisper_get_available_models';
-      const models = await invoke<any[]>(command);
-      const isDownloading = models.some(m =>
-        m.status && (
-          typeof m.status === 'object'
-            ? 'Downloading' in m.status
-            : m.status === 'Downloading'
-        )
-      );
-      return isDownloading;
-    } catch (error) {
-      console.error('Failed to check model download status:', error);
-      return false; // Default to not downloading (will show error + modal)
-    }
-  }, [transcriptModelConfig]);
+    return false;
+  }, []);
 
   // Handle manual recording start (from button click)
   const handleRecordingStart = useCallback(async () => {

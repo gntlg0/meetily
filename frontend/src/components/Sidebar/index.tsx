@@ -65,15 +65,15 @@ const Sidebar: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showModelSettings, setShowModelSettings] = useState(false);
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
-    provider: 'ollama',
+    provider: 'claude',
     model: '',
     whisperModel: '',
     apiKey: null,
     ollamaEndpoint: null
   });
   const [transcriptModelConfig, setTranscriptModelConfig] = useState<TranscriptModelProps>({
-    provider: 'parakeet',
-    model: 'parakeet-tdt-0.6b-v3-int8',
+    provider: 'elevenLabs',
+    model: 'scribe_v1',
   });
   const [settingsSaveSuccess, setSettingsSaveSuccess] = useState<boolean | null>(null);
 
@@ -118,7 +118,7 @@ const Sidebar: React.FC = () => {
         const data = await invoke('api_get_model_config') as any;
         if (data && data.provider !== null) {
           // Fetch API key if not included and provider requires it
-          if (data.provider !== 'ollama' && !data.apiKey) {
+          if (!data.apiKey) {
             try {
               const apiKeyData = await invoke('api_get_api_key', {
                 provider: data.provider

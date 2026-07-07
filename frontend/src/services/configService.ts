@@ -9,7 +9,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { TranscriptModelProps } from '@/components/TranscriptSettings';
 
 export interface ModelConfig {
-  provider: 'ollama' | 'groq' | 'claude' | 'openrouter' | 'openai' | 'builtin-ai' | 'custom-openai';
+  // API-only build: local providers (ollama, builtin-ai) have been removed.
+  provider: 'groq' | 'claude' | 'openrouter' | 'openai' | 'custom-openai';
   model: string;
   whisperModel: string;
   /**
@@ -17,6 +18,7 @@ export interface ModelConfig {
    * This field may contain stale data when provider changes without saving.
    */
   apiKey?: string | null;
+  /** @deprecated Ollama support removed; retained so old saved configs still parse. */
   ollamaEndpoint?: string | null;
   // Custom OpenAI fields (only populated when provider is 'custom-openai')
   customOpenAIEndpoint?: string | null;

@@ -21,7 +21,6 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
 import { useConfig } from '@/contexts/ConfigContext';
 import { LANGUAGES } from '@/constants/languages';
-import { useTranscriptionModels, ModelOption } from '@/hooks/useTranscriptionModels';
 import Analytics from '@/lib/analytics';
 
 interface RetranscribeDialogProps {
@@ -64,16 +63,6 @@ export function RetranscribeDialog({
   const [error, setError] = useState<string | null>(null);
   const [selectedLang, setSelectedLang] = useState(selectedLanguage || 'auto');
 
-  // Use centralized model fetching hook
-  const {
-    availableModels,
-    selectedModelKey,
-    setSelectedModelKey,
-    loadingModels,
-    fetchModels,
-    resetSelection,
-  } = useTranscriptionModels(transcriptModelConfig);
-
   // Stable refs for callbacks to avoid listener re-registration
   const onCompleteRef = useRef(onComplete);
   const onOpenChangeRef = useRef(onOpenChange);
@@ -83,23 +72,6 @@ export function RetranscribeDialog({
   // Track previous open state to only reset on closed→open transition
   const prevOpenRef = useRef(false);
 
-  // Helper to get selected model details (memoized)
-  const selectedModelDetails = useMemo((): ModelOption | undefined => {
-    if (!selectedModelKey) return undefined;
-    const colonIndex = selectedModelKey.indexOf(':');
-    if (colonIndex === -1) return undefined;
-    const provider = selectedModelKey.slice(0, colonIndex);
-    const name = selectedModelKey.slice(colonIndex + 1);
-    return availableModels.find(m => m.provider === provider && m.name === name);
-  }, [selectedModelKey, availableModels]);
-  const isParakeetModel = selectedModelDetails?.provider === 'parakeet';
-
-  useEffect(() => {
-    if (isParakeetModel && selectedLang !== 'auto') {
-      setSelectedLang('auto');
-    }
-  }, [isParakeetModel, selectedLang]);
-
   // Reset state only when dialog transitions from closed to open
   // This prevents re-initialization when config changes while dialog is already open
   useEffect(() => {
@@ -107,16 +79,12 @@ export function RetranscribeDialog({
     prevOpenRef.current = open;
 
     if (open && !wasOpen) {
-      resetSelection();
       setIsProcessing(false);
       setProgress(null);
       setError(null);
       setSelectedLang(selectedLanguage || 'auto');
-
-      // Fetch available models using centralized hook
-      fetchModels();
     }
-  }, [open, selectedLanguage, transcriptModelConfig, fetchModels]);
+  }, [open, selectedLanguage, transcriptModelConfig]);
 
   // Listen for retranscription events
   useEffect(() => {
@@ -207,19 +175,20 @@ export function RetranscribeDialog({
     setProgress(null);
 
     try {
-      const languageToSend = isParakeetModel ? null : selectedLang === 'auto' ? null : selectedLang;
+      const languageToSend = selectedLang === 'auto' ? null : selectedLang;
       await Analytics.track('enhance_transcript_started', {
-        language: isParakeetModel ? 'auto' : (selectedLang === 'auto' ? 'auto' : selectedLang),
-        model_provider: selectedModelDetails?.provider || '',
-        model_name: selectedModelDetails?.name || ''
+        language: selectedLang === 'auto' ? 'auto' : selectedLang,
+        model_provider: transcriptModelConfig.provider,
+        model_name: transcriptModelConfig.model
       });
 
+      // API-only build: model/provider come from the saved transcription settings.
       await invoke('start_retranscription_command', {
         meetingId,
         meetingFolderPath,
         language: languageToSend,
-        model: selectedModelDetails?.name || null,
-        provider: selectedModelDetails?.provider || null,
+        model: null,
+        provider: null,
       });
     } catch (err: any) {
       setIsProcessing(false);
@@ -301,61 +270,25 @@ export function RetranscribeDialog({
 
         <div className="space-y-4 py-4">
           {!isProcessing && !error && (
-            !isParakeetModel ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Language</span>
-                </div>
-                <Select value={selectedLang} onValueChange={setSelectedLang}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select language" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {LANGUAGES.map((lang) => (
-                      <SelectItem key={lang.code} value={lang.code}>
-                        {lang.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Select a specific language to improve accuracy, or use auto-detect
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Language</span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Language selection isn't supported for Parakeet. It always uses automatic detection.
-                </p>
-              </div>
-            )
-          )}
-
-          {!isProcessing && !error && availableModels.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Cpu className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Model</span>
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Language</span>
               </div>
-              <Select value={selectedModelKey} onValueChange={setSelectedModelKey} disabled={loadingModels}>
+              <Select value={selectedLang} onValueChange={setSelectedLang}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder={loadingModels ? "Loading models..." : "Select model"} />
+                  <SelectValue placeholder="Select language" />
                 </SelectTrigger>
-                <SelectContent>
-                  {availableModels.map((model) => (
-                    <SelectItem key={`${model.provider}:${model.name}`} value={`${model.provider}:${model.name}`}>
-                      {model.displayName} ({Math.round(model.size_mb)} MB)
+                <SelectContent className="max-h-60">
+                  {LANGUAGES.map((lang) => (
+                    <SelectItem key={lang.code} value={lang.code}>
+                      {lang.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Choose a transcription model
+                Select a specific language to improve accuracy, or use auto-detect
               </p>
             </div>
           )}

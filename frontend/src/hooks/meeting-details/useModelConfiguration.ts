@@ -11,8 +11,8 @@ interface UseModelConfigurationProps {
 export function useModelConfiguration({ serverAddress }: UseModelConfigurationProps) {
   // Note: No hardcoded defaults - DB is the source of truth
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
-    provider: 'ollama',
-    model: '', // Empty until loaded from DB
+    provider: 'claude',
+    model: 'claude-sonnet-4-5-20250929',
     whisperModel: 'large-v3'
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -34,7 +34,7 @@ export function useModelConfiguration({ serverAddress }: UseModelConfigurationPr
             ollamaEndpoint: data.ollamaEndpoint || 'default'
           });
           // Fetch API key if not included and provider requires it
-          if (data.provider !== 'ollama' && data.provider !== 'custom-openai' && !data.apiKey) {
+          if (data.provider !== 'custom-openai' && !data.apiKey) {
             try {
               const apiKeyData = await invokeTauri('api_get_api_key', {
                 provider: data.provider

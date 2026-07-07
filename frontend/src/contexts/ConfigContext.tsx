@@ -7,19 +7,16 @@ import { configService, ModelConfig } from '@/services/configService';
 import { invoke } from '@tauri-apps/api/core';
 import Analytics from '@/lib/analytics';
 import { BetaFeatures, BetaFeatureKey, loadBetaFeatures, saveBetaFeatures } from '@/types/betaFeatures';
-import { DEFAULT_TRANSCRIPTION_PROVIDER, MODEL_DEFAULTS } from '@/constants/modelDefaults';
+import {
+  DEFAULT_TRANSCRIPTION_PROVIDER,
+  DEFAULT_TRANSCRIPTION_MODEL,
+  DEFAULT_SUMMARY_PROVIDER,
+  DEFAULT_SUMMARY_MODEL,
+} from '@/constants/modelDefaults';
 import { DEFAULT_TRANSCRIPTION_LANGUAGE } from '@/constants/languages';
-
-export interface OllamaModel {
-  name: string;
-  id: string;
-  size: string;
-  modified: string;
-}
 
 export interface StorageLocations {
   database: string;
-  models: string;
   recordings: string;
 }
 
@@ -69,8 +66,7 @@ interface ConfigContextType {
   betaFeatures: BetaFeatures;
   toggleBetaFeature: (featureKey: BetaFeatureKey, enabled: boolean) => void;
 
-  // Ollama models
-  models: OllamaModel[];
+  // Per-provider fallback model lists
   modelOptions: Record<ModelConfig['provider'], string[]>;
   error: string;
 
@@ -101,16 +97,16 @@ const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
 export function ConfigProvider({ children }: { children: ReactNode }) {
   // Model configuration state
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
-    provider: 'ollama',
-    model: 'llama3.2:latest',
-    whisperModel: 'large-v3',
+    provider: DEFAULT_SUMMARY_PROVIDER,
+    model: DEFAULT_SUMMARY_MODEL,
+    whisperModel: '',
     ollamaEndpoint: null
   });
 
   // Transcript model configuration state
   const [transcriptModelConfig, setTranscriptModelConfig] = useState<TranscriptModelProps>({
     provider: DEFAULT_TRANSCRIPTION_PROVIDER,
-    model: MODEL_DEFAULTS[DEFAULT_TRANSCRIPTION_PROVIDER],
+    model: DEFAULT_TRANSCRIPTION_MODEL,
     apiKey: null
   });
 
@@ -128,8 +124,6 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     openrouter: null,
   });
 
-  // Ollama models list and error state
-  const [models, setModels] = useState<OllamaModel[]>([]);
   const [error, setError] = useState<string>('');
 
   // Device configuration state
@@ -177,22 +171,6 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   const preferencesLoadedRef = useRef(false);
   const isLoadingRef = useRef(false);
 
-  // Load Ollama models (uses saved endpoint, re-runs when endpoint changes after config load)
-  useEffect(() => {
-    const loadModels = async () => {
-      try {
-        const endpoint = modelConfig.ollamaEndpoint || null;
-        const modelList = await invoke<OllamaModel[]>('get_ollama_models', { endpoint });
-        setModels(modelList);
-        setError('');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load Ollama models');
-        console.error('Error loading models:', err);
-      }
-    };
-    loadModels();
-  }, [modelConfig.ollamaEndpoint]);
-
   // Load transcript configuration on mount
   useEffect(() => {
     const loadTranscriptConfig = async () => {
@@ -202,7 +180,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
           console.log('[ConfigContext] Loaded saved transcript config:', config);
           setTranscriptModelConfig({
             provider: config.provider || DEFAULT_TRANSCRIPTION_PROVIDER,
-            model: config.model || MODEL_DEFAULTS[DEFAULT_TRANSCRIPTION_PROVIDER],
+            model: config.model || DEFAULT_TRANSCRIPTION_MODEL,
             apiKey: config.apiKey || null
           });
         }
@@ -363,14 +341,13 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     loadDevicePreferences();
   }, []);
 
-  // Calculate model options based on available models
+  // Fallback model options per API provider (full lists come from each
+  // provider's list-models command in the settings UI)
   const modelOptions: Record<ModelConfig['provider'], string[]> = {
-    ollama: models.map(model => model.name),
-    claude: ['claude-3-5-sonnet-latest'],
+    claude: [DEFAULT_SUMMARY_MODEL, 'claude-3-5-sonnet-latest'],
     groq: ['llama-3.3-70b-versatile'],
     openrouter: [],
     openai: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-    'builtin-ai': [],
     'custom-openai': [],
   };
 
@@ -439,15 +416,13 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       }
 
       // Load storage locations
-      const [dbDir, modelsDir, recordingsDir] = await Promise.all([
+      const [dbDir, recordingsDir] = await Promise.all([
         invoke<string>('get_database_directory'),
-        invoke<string>('whisper_get_models_directory'),
         invoke<string>('get_default_recordings_folder_path')
       ]);
 
       setStorageLocations({
         database: dbDir,
-        models: modelsDir,
         recordings: recordingsDir
       });
 
@@ -501,7 +476,6 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     toggleConfidenceIndicator,
     betaFeatures,
     toggleBetaFeature,
-    models,
     modelOptions,
     error,
     notificationSettings,
@@ -523,7 +497,6 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     toggleConfidenceIndicator,
     betaFeatures,
     toggleBetaFeature,
-    models,
     modelOptions,
     error,
     notificationSettings,

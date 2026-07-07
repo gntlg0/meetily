@@ -13,13 +13,11 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { RecordingStateProvider } from '@/contexts/RecordingStateContext'
-import { OllamaDownloadProvider } from '@/contexts/OllamaDownloadContext'
 import { TranscriptProvider } from '@/contexts/TranscriptContext'
 import { ConfigProvider, useConfig } from '@/contexts/ConfigContext'
 import { OnboardingProvider } from '@/contexts/OnboardingContext'
 import { OnboardingFlow } from '@/components/onboarding'
 import { loadBetaFeatures } from '@/types/betaFeatures'
-import { DownloadProgressToastProvider } from '@/components/shared/DownloadProgressToast'
 import { UpdateCheckProvider } from '@/components/UpdateCheckProvider'
 import { RecordingPostProcessingProvider } from '@/contexts/RecordingPostProcessingProvider'
 import { ImportAudioDialog, ImportDropOverlay } from '@/components/ImportAudio'
@@ -237,16 +235,12 @@ export default function RootLayout({
           <RecordingStateProvider>
             <TranscriptProvider>
               <ConfigProvider>
-                <OllamaDownloadProvider>
-                  <OnboardingProvider>
+                <OnboardingProvider>
                     <UpdateCheckProvider>
                       <SidebarProvider>
                         <TooltipProvider>
                           <RecordingPostProcessingProvider>
                             <ImportDialogProvider onOpen={handleOpenImportDialog}>
-                              {/* Download progress toast provider - listens for background downloads */}
-                              <DownloadProgressToastProvider />
-
                               {/* Show onboarding or main app */}
                               {showOnboarding ? (
                                 <OnboardingFlow onComplete={handleOnboardingComplete} />
@@ -268,9 +262,7 @@ export default function RootLayout({
                         </TooltipProvider>
                       </SidebarProvider>
                     </UpdateCheckProvider>
-                  </OnboardingProvider>
-
-                </OllamaDownloadProvider>
+                </OnboardingProvider>
               </ConfigProvider>
             </TranscriptProvider>
           </RecordingStateProvider>

@@ -43,7 +43,6 @@ export function SettingsModals({
   const {
     modelConfig,
     setModelConfig,
-    models,
     modelOptions,
     error,
     selectedDevices,
@@ -103,10 +102,8 @@ export function SettingsModals({
                         });
                       }}
                     >
-                      <option value="builtin-ai">Built-in AI</option>
                       <option value="claude">Claude</option>
                       <option value="groq">Groq</option>
-                      <option value="ollama">Ollama</option>
                       <option value="openrouter">OpenRouter</option>
                       <option value="openai">OpenAI</option>
                     </select>
@@ -124,28 +121,9 @@ export function SettingsModals({
                     </select>
                   </div>
                 </div>
-                {modelConfig.provider === 'ollama' && (
-                  <div>
-                    <h4 className="text-lg font-bold mb-4">Available Ollama Models</h4>
-                    {error && (
-                      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                        {error}
-                      </div>
-                    )}
-                    <div className="grid gap-4 max-h-[400px] overflow-y-auto pr-2">
-                      {models.map((model) => (
-                        <div
-                          key={model.id}
-                          className={`bg-white p-4 rounded-lg shadow cursor-pointer transition-colors ${modelConfig.model === model.name ? 'ring-2 ring-blue-500 bg-blue-50' : 'hover:bg-gray-50'
-                            }`}
-                          onClick={() => setModelConfig((prev: ModelConfig) => ({ ...prev, model: model.name }))}
-                        >
-                          <h3 className="font-bold">{model.name}</h3>
-                          <p className="text-gray-600">Size: {model.size}</p>
-                          <p className="text-gray-600">Modified: {model.modified}</p>
-                        </div>
-                      ))}
-                    </div>
+                {error && (
+                  <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                    {error}
                   </div>
                 )}
               </div>
@@ -226,7 +204,6 @@ export function SettingsModals({
             selectedLanguage={selectedLanguage}
             onLanguageChange={setSelectedLanguage}
             disabled={isRecording}
-            provider={transcriptModelConfig.provider}
           />
 
           <div className="mt-6 flex justify-end">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lock, Sparkles, Cpu } from 'lucide-react';
+import { Lock, Sparkles, Cloud } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { OnboardingContainer } from '../OnboardingContainer';
 import { useOnboarding } from '@/contexts/OnboardingContext';
@@ -10,22 +10,22 @@ export function WelcomeStep() {
   const features = [
     {
       icon: Lock,
-      title: 'Your data never leaves your device',
+      title: 'Recordings and meeting notes stay on your device',
     },
     {
       icon: Sparkles,
-      title: 'Intelligent summaries & insights',
+      title: 'Intelligent summaries & insights via the Anthropic API',
     },
     {
-      icon: Cpu,
-      title: 'Works offline, no cloud required',
+      icon: Cloud,
+      title: 'Cloud speech-to-text — no heavy model downloads',
     },
   ];
 
   return (
     <OnboardingContainer
       title="Welcome to Meetily"
-      description="Record. Transcribe. Summarize. All on your device."
+      description="Record. Transcribe. Summarize. Powered by cloud APIs."
       step={1}
       hideProgress={true}
     >

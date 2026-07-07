@@ -4,13 +4,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
-import { Eye, EyeOff, Lock, Unlock } from 'lucide-react';
-import { ModelManager } from './WhisperModelManager';
-import { ParakeetModelManager } from './ParakeetModelManager';
+import { Eye, EyeOff, Lock, Unlock, CloudCog } from 'lucide-react';
+import { toast } from 'sonner';
 
-
+// API-only build: transcription always goes through a cloud ASR provider.
+// Local Whisper / Parakeet have been removed.
 export interface TranscriptModelProps {
-    provider: 'localWhisper' | 'parakeet' | 'deepgram' | 'elevenLabs' | 'groq' | 'openai';
+    provider: 'deepgram' | 'elevenLabs' | 'groq' | 'openai';
     model: string;
     apiKey?: string | null;
 }
@@ -21,44 +21,35 @@ export interface TranscriptSettingsProps {
     onModelSelect?: () => void;
 }
 
+const MODEL_OPTIONS: Record<TranscriptModelProps['provider'], string[]> = {
+    deepgram: ['nova-2-phonecall'],
+    elevenLabs: ['scribe_v1'],
+    groq: ['whisper-large-v3'],
+    openai: ['gpt-4o-transcribe', 'whisper-1'],
+};
+
 export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelConfig, onModelSelect }: TranscriptSettingsProps) {
     const [apiKey, setApiKey] = useState<string | null>(transcriptModelConfig.apiKey || null);
     const [showApiKey, setShowApiKey] = useState<boolean>(false);
     const [isApiKeyLocked, setIsApiKeyLocked] = useState<boolean>(true);
     const [isLockButtonVibrating, setIsLockButtonVibrating] = useState<boolean>(false);
     const [uiProvider, setUiProvider] = useState<TranscriptModelProps['provider']>(transcriptModelConfig.provider);
+    const [saving, setSaving] = useState(false);
 
-    // Sync uiProvider when backend config changes (e.g., after model selection or initial load)
+    // Sync uiProvider when backend config changes (e.g., after initial load)
     useEffect(() => {
         setUiProvider(transcriptModelConfig.provider);
     }, [transcriptModelConfig.provider]);
 
-    useEffect(() => {
-        if (transcriptModelConfig.provider === 'localWhisper' || transcriptModelConfig.provider === 'parakeet') {
-            setApiKey(null);
-        }
-    }, [transcriptModelConfig.provider]);
-
     const fetchApiKey = async (provider: string) => {
         try {
-
             const data = await invoke('api_get_transcript_api_key', { provider }) as string;
-
             setApiKey(data || '');
         } catch (err) {
             console.error('Error fetching API key:', err);
             setApiKey(null);
         }
     };
-    const modelOptions = {
-        localWhisper: [], // Model selection handled by ModelManager component
-        parakeet: [], // Model selection handled by ParakeetModelManager component
-        deepgram: ['nova-2-phonecall'],
-        elevenLabs: ['eleven_multilingual_v2'],
-        groq: ['llama-3.3-70b-versatile'],
-        openai: ['gpt-4o'],
-    };
-    const requiresApiKey = transcriptModelConfig.provider === 'deepgram' || transcriptModelConfig.provider === 'elevenLabs' || transcriptModelConfig.provider === 'openai' || transcriptModelConfig.provider === 'groq';
 
     const handleInputClick = () => {
         if (isApiKeyLocked) {
@@ -67,44 +58,47 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
         }
     };
 
-    const handleWhisperModelSelect = (modelName: string) => {
-        // Always update config when model is selected, regardless of current provider
-        // This ensures the model is set when user switches back
-        setTranscriptModelConfig({
-            ...transcriptModelConfig,
-            provider: 'localWhisper', // Ensure provider is set correctly
-            model: modelName
-        });
-        // Close modal after selection
-        if (onModelSelect) {
-            onModelSelect();
-        }
-    };
-
-    const handleParakeetModelSelect = (modelName: string) => {
-        // Always update config when model is selected, regardless of current provider
-        // This ensures the model is set when user switches back
-        setTranscriptModelConfig({
-            ...transcriptModelConfig,
-            provider: 'parakeet', // Ensure provider is set correctly
-            model: modelName
-        });
-        // Close modal after selection
-        if (onModelSelect) {
-            onModelSelect();
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const model = transcriptModelConfig.provider === uiProvider && transcriptModelConfig.model
+                ? transcriptModelConfig.model
+                : MODEL_OPTIONS[uiProvider][0];
+            await invoke('api_save_transcript_config', {
+                provider: uiProvider,
+                model,
+                apiKey: apiKey || null,
+                authToken: null,
+            });
+            setTranscriptModelConfig({ provider: uiProvider, model, apiKey });
+            toast.success('Transcription settings saved');
+            onModelSelect?.();
+        } catch (err) {
+            console.error('Failed to save transcript settings:', err);
+            toast.error('Failed to save transcription settings', {
+                description: err instanceof Error ? err.message : String(err),
+            });
+        } finally {
+            setSaving(false);
         }
     };
 
     return (
         <div>
             <div>
-                {/* <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Transcript Settings</h3>
-                </div> */}
                 <div className="space-y-4 pb-6">
+                    <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                        <CloudCog className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                        <p>
+                            Transcription runs through a cloud speech-to-text API. The
+                            provider integration is being finalized — configuration is
+                            saved, but transcription is not functional yet in this build.
+                        </p>
+                    </div>
+
                     <div>
                         <Label className="block text-sm font-medium text-gray-700 mb-1">
-                            Transcript Model
+                            Transcription Provider
                         </Label>
                         <div className="flex space-x-2 mx-1">
                             <Select
@@ -112,123 +106,90 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                                 onValueChange={(value) => {
                                     const provider = value as TranscriptModelProps['provider'];
                                     setUiProvider(provider);
-                                    if (provider !== 'localWhisper' && provider !== 'parakeet') {
-                                        fetchApiKey(provider);
-                                    }
+                                    fetchApiKey(provider);
                                 }}
                             >
                                 <SelectTrigger className='focus:ring-1 focus:ring-blue-500 focus:border-blue-500'>
                                     <SelectValue placeholder="Select provider" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="parakeet">⚡ Parakeet (Recommended - Real-time / Accurate)</SelectItem>
-                                    <SelectItem value="localWhisper">🏠 Local Whisper (High Accuracy)</SelectItem>
-                                    {/* <SelectItem value="deepgram">☁️ Deepgram (Backup)</SelectItem>
-                                    <SelectItem value="elevenLabs">☁️ ElevenLabs</SelectItem>
-                                    <SelectItem value="groq">☁️ Groq</SelectItem>
-                                    <SelectItem value="openai">☁️ OpenAI</SelectItem> */}
+                                    <SelectItem value="elevenLabs">☁️ ElevenLabs (Scribe)</SelectItem>
+                                    <SelectItem value="deepgram">☁️ Deepgram</SelectItem>
+                                    <SelectItem value="groq">☁️ Groq (Whisper API)</SelectItem>
+                                    <SelectItem value="openai">☁️ OpenAI</SelectItem>
                                 </SelectContent>
                             </Select>
 
-                            {uiProvider !== 'localWhisper' && uiProvider !== 'parakeet' && (
-                                <Select
-                                    value={transcriptModelConfig.model}
-                                    onValueChange={(value) => {
-                                        const model = value as TranscriptModelProps['model'];
-                                        setTranscriptModelConfig({ ...transcriptModelConfig, provider: uiProvider, model });
-                                    }}
-                                >
-                                    <SelectTrigger className='focus:ring-1 focus:ring-blue-500 focus:border-blue-500'>
-                                        <SelectValue placeholder="Select model" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {modelOptions[uiProvider].map((model) => (
-                                            <SelectItem key={model} value={model}>{model}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            )}
-
+                            <Select
+                                value={transcriptModelConfig.provider === uiProvider ? transcriptModelConfig.model : MODEL_OPTIONS[uiProvider][0]}
+                                onValueChange={(value) => {
+                                    setTranscriptModelConfig({ ...transcriptModelConfig, provider: uiProvider, model: value });
+                                }}
+                            >
+                                <SelectTrigger className='focus:ring-1 focus:ring-blue-500 focus:border-blue-500'>
+                                    <SelectValue placeholder="Select model" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {MODEL_OPTIONS[uiProvider].map((model) => (
+                                        <SelectItem key={model} value={model}>{model}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
 
-                    {uiProvider === 'localWhisper' && (
-                        <div className="mt-6">
-                            <ModelManager
-                                selectedModel={transcriptModelConfig.provider === 'localWhisper' ? transcriptModelConfig.model : undefined}
-                                onModelSelect={handleWhisperModelSelect}
-                                autoSave={true}
+                    <div>
+                        <Label className="block text-sm font-medium text-gray-700 mb-1">
+                            API Key
+                        </Label>
+                        <div className="relative mx-1">
+                            <Input
+                                type={showApiKey ? "text" : "password"}
+                                className={`pr-24 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${isApiKeyLocked ? 'bg-gray-100 cursor-not-allowed' : ''
+                                    }`}
+                                value={apiKey || ''}
+                                onChange={(e) => setApiKey(e.target.value)}
+                                disabled={isApiKeyLocked}
+                                onClick={handleInputClick}
+                                placeholder="Enter your API key"
                             />
-                        </div>
-                    )}
-
-                    {uiProvider === 'parakeet' && (
-                        <div className="mt-6">
-                            <ParakeetModelManager
-                                selectedModel={transcriptModelConfig.provider === 'parakeet' ? transcriptModelConfig.model : undefined}
-                                onModelSelect={handleParakeetModelSelect}
-                                autoSave={true}
-                            />
-                        </div>
-                    )}
-
-
-                    {requiresApiKey && (
-                        <div>
-                            <Label className="block text-sm font-medium text-gray-700 mb-1">
-                                API Key
-                            </Label>
-                            <div className="relative mx-1">
-                                <Input
-                                    type={showApiKey ? "text" : "password"}
-                                    className={`pr-24 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${isApiKeyLocked ? 'bg-gray-100 cursor-not-allowed' : ''
-                                        }`}
-                                    value={apiKey || ''}
-                                    onChange={(e) => setApiKey(e.target.value)}
-                                    disabled={isApiKeyLocked}
+                            {isApiKeyLocked && (
+                                <div
                                     onClick={handleInputClick}
-                                    placeholder="Enter your API key"
+                                    className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-50 rounded-md cursor-not-allowed"
                                 />
-                                {isApiKeyLocked && (
-                                    <div
-                                        onClick={handleInputClick}
-                                        className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-50 rounded-md cursor-not-allowed"
-                                    />
-                                )}
-                                <div className="absolute inset-y-0 right-0 pr-1 flex items-center">
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => setIsApiKeyLocked(!isApiKeyLocked)}
-                                        className={`transition-colors duration-200 ${isLockButtonVibrating ? 'animate-vibrate text-red-500' : ''
-                                            }`}
-                                        title={isApiKeyLocked ? "Unlock to edit" : "Lock to prevent editing"}
-                                    >
-                                        {isApiKeyLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => setShowApiKey(!showApiKey)}
-                                    >
-                                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                    </Button>
-                                </div>
+                            )}
+                            <div className="absolute inset-y-0 right-0 pr-1 flex items-center">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setIsApiKeyLocked(!isApiKeyLocked)}
+                                    className={`transition-colors duration-200 ${isLockButtonVibrating ? 'animate-vibrate text-red-500' : ''
+                                        }`}
+                                    title={isApiKeyLocked ? "Unlock to edit" : "Lock to prevent editing"}
+                                >
+                                    {isApiKeyLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setShowApiKey(!showApiKey)}
+                                >
+                                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </Button>
                             </div>
                         </div>
-                    )}
+                    </div>
+
+                    <div className="flex justify-end mx-1">
+                        <Button onClick={handleSave} disabled={saving} className="bg-gray-900 hover:bg-gray-800 text-white">
+                            {saving ? 'Saving…' : 'Save'}
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div >
     )
 }
-
-
-
-
-
-
-
-
