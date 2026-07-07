@@ -44,4 +44,4 @@ export const LANGUAGES = [
  * Default transcription language for this build.
  * IMPORTANT: Keep in sync with DEFAULT_TRANSCRIPTION_LANGUAGE in src-tauri/src/config.rs
  */
-export const DEFAULT_TRANSCRIPTION_LANGUAGE = 'mn';
+export const DEFAULT_TRANSCRIPTION_LANGUAGE = 'auto';

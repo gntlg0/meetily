@@ -8,7 +8,7 @@
  * IMPORTANT: Keep in sync with Rust constants in src-tauri/src/config.rs
  */
 export const DEFAULT_TRANSCRIPTION_PROVIDER = 'elevenLabs';
-export const DEFAULT_TRANSCRIPTION_MODEL = 'scribe_v1';
+export const DEFAULT_TRANSCRIPTION_MODEL = 'scribe_v2';
 
 /**
  * Default summary provider/model (Anthropic API).
