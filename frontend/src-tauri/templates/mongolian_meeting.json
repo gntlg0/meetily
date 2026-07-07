@@ -1,0 +1,33 @@
+{
+  "name": "Хурлын тэмдэглэл",
+  "description": "Компанийн хурлын тэмдэглэлийн стандарт загвар: ерөнхий мэдээлэл, хэлэлцсэн асуудлууд, үндсэн шийдвэр, даалгаврын хүснэгт.",
+  "sections": [
+    {
+      "title": "Хурлын ерөнхий мэдээлэл",
+      "instruction": "Start with a one-line italic subtitle describing what the meeting was about. Then output a two-column Markdown table with these rows: 'Огноо' (the meeting date if stated in the transcript), 'Зорилго' (the meeting's main objective, one short phrase), and 'Оролцогчид' (the participants or teams present). Use only information stated in the transcript; leave a cell as '—' if it was not mentioned.",
+      "format": "paragraph",
+      "item_format": "| Талбар | Утга |\n| --- | --- |"
+    },
+    {
+      "title": "Хэлэлцсэн асуудлууд",
+      "instruction": "Break the meeting into its main discussion topics in the order they were discussed. Give each topic a bold sub-heading and summarize its key points, figures, costs, options, deadlines, and technical details. When the transcript contains structured data (prices, plan tiers, specifications, credentials, step-by-step processes), present it as a Markdown table or a numbered list under that topic. Cover every substantive topic; never invent facts not in the transcript.",
+      "format": "paragraph"
+    },
+    {
+      "title": "Үндсэн шийдвэр, тохиролцоо",
+      "instruction": "List the concrete decisions and agreements the meeting reached, as a numbered list. Each item is one clear, specific sentence (include dates, amounts, or names where they were decided).",
+      "format": "list"
+    },
+    {
+      "title": "Даалгавар, хариуцагчид",
+      "instruction": "List every task that was explicitly assigned, as a Markdown table. Columns: '№' (sequential number), 'Даалгавар' (the task), 'Хариуцагч' (the person or people responsible), 'Хугацаа' (the deadline or timing — a date, or wording like 'Шуурхай' / 'Credentials авмагц' if that is what was said). Include only tasks with a clear owner or deadline from the transcript.",
+      "format": "list",
+      "item_format": "| № | Даалгавар | Хариуцагч | Хугацаа |\n| --- | --- | --- | --- |"
+    },
+    {
+      "title": "Тэмдэглэл хөтөлсөн",
+      "instruction": "If the transcript identifies who took the notes or ran the meeting, write their name here. Otherwise output '—'.",
+      "format": "string"
+    }
+  ]
+}

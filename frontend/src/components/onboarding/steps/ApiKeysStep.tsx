@@ -7,7 +7,7 @@ import { useOnboarding } from '@/contexts/OnboardingContext';
 import { toast } from 'sonner';
 
 const DEFAULT_SUMMARY_PROVIDER = 'claude';
-const DEFAULT_SUMMARY_MODEL = 'claude-sonnet-4-5-20250929';
+const DEFAULT_SUMMARY_MODEL = 'claude-sonnet-5';
 
 /**
  * Onboarding step 2: enter API keys.

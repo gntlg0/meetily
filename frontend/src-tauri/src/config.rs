@@ -22,7 +22,7 @@ pub const DEFAULT_TRANSCRIPTION_LANGUAGE: &str = "mn";
 
 /// Default summary provider/model (Anthropic API).
 pub const DEFAULT_SUMMARY_PROVIDER: &str = "claude";
-pub const DEFAULT_SUMMARY_MODEL: &str = "claude-sonnet-4-5-20250929";
+pub const DEFAULT_SUMMARY_MODEL: &str = "claude-sonnet-5";
 
 /// Default (provider, model) pair used by every "no transcript config yet"
 /// fallback, so provider routing is decided in one place.

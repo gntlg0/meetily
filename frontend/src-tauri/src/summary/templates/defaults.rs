@@ -9,11 +9,15 @@ pub const DAILY_STANDUP: &str = include_str!("../../../templates/daily_standup.j
 /// Standard meeting notes template
 pub const STANDARD_MEETING: &str = include_str!("../../../templates/standard_meeting.json");
 
+/// Mongolian meeting-note template (Хурлын тэмдэглэл) — the default for this build
+pub const MONGOLIAN_MEETING: &str = include_str!("../../../templates/mongolian_meeting.json");
+
 /// Registry of all built-in templates
 ///
 /// Maps template identifiers to their embedded JSON content
 pub fn get_builtin_templates() -> Vec<(&'static str, &'static str)> {
     vec![
+        ("mongolian_meeting", MONGOLIAN_MEETING),
         ("daily_standup", DAILY_STANDUP),
         ("standard_meeting", STANDARD_MEETING),
     ]
@@ -28,6 +32,7 @@ pub fn get_builtin_templates() -> Vec<(&'static str, &'static str)> {
 /// The template JSON content if found, None otherwise
 pub fn get_builtin_template(id: &str) -> Option<&'static str> {
     match id {
+        "mongolian_meeting" => Some(MONGOLIAN_MEETING),
         "daily_standup" => Some(DAILY_STANDUP),
         "standard_meeting" => Some(STANDARD_MEETING),
         _ => None,
@@ -36,7 +41,7 @@ pub fn get_builtin_template(id: &str) -> Option<&'static str> {
 
 /// List all built-in template identifiers
 pub fn list_builtin_template_ids() -> Vec<&'static str> {
-    vec!["daily_standup", "standard_meeting"]
+    vec!["mongolian_meeting", "daily_standup", "standard_meeting"]
 }
 
 #[cfg(test)]

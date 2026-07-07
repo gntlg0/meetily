@@ -6,7 +6,7 @@ import type { PermissionStatus, OnboardingPermissions } from '@/types/onboarding
 
 // API-only onboarding: no local models are downloaded. The summary model is a
 // cloud (Anthropic) model configured via API key.
-const DEFAULT_SUMMARY_MODEL = 'claude-sonnet-4-5-20250929';
+const DEFAULT_SUMMARY_MODEL = 'claude-sonnet-5';
 
 const MAX_STEP = 3; // 1: Welcome, 2: API Keys, 3: Permissions (macOS)
 

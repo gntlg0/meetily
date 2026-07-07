@@ -15,7 +15,7 @@ interface SummaryModelSettingsProps {
 export function SummaryModelSettings({ refetchTrigger }: SummaryModelSettingsProps) {
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
     provider: 'claude',
-    model: 'claude-sonnet-4-5-20250929',
+    model: 'claude-sonnet-5',
     whisperModel: 'large-v3',
     apiKey: null,
     ollamaEndpoint: null

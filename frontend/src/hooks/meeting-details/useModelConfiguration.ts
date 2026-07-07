@@ -12,7 +12,7 @@ export function useModelConfiguration({ serverAddress }: UseModelConfigurationPr
   // Note: No hardcoded defaults - DB is the source of truth
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
     provider: 'claude',
-    model: 'claude-sonnet-4-5-20250929',
+    model: 'claude-sonnet-5',
     whisperModel: 'large-v3'
   });
   const [isLoading, setIsLoading] = useState(true);

@@ -14,4 +14,4 @@ export const DEFAULT_TRANSCRIPTION_MODEL = 'scribe_v2';
  * Default summary provider/model (Anthropic API).
  */
 export const DEFAULT_SUMMARY_PROVIDER = 'claude';
-export const DEFAULT_SUMMARY_MODEL = 'claude-sonnet-4-5-20250929';
+export const DEFAULT_SUMMARY_MODEL = 'claude-sonnet-5';
