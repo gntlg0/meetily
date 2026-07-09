@@ -82,13 +82,12 @@ const globalRef = globalThis as unknown as {
 export const db: Database.Database = globalRef.__callTestDb ?? (globalRef.__callTestDb = open());
 
 /**
- * Crash recovery. Any job still in a non-terminal state at boot has no worker
- * behind it — the process that owned it is gone. Mark it failed + retryable
- * rather than leaving it "transcribing" forever. The audio file on disk is
- * untouched, so Retry re-runs from the original upload.
+ * Crash recovery. Any job still in a non-terminal state when this process starts
+ * has no worker behind it — the process that owned it is gone. Mark it failed +
+ * retryable rather than leaving it "transcribing" forever. The audio file on
+ * disk is untouched, so Retry re-runs from the original upload.
  *
- * Safe to call more than once: it only ever touches in-flight rows, and it runs
- * before any worker starts (see instrumentation.ts).
+ * Safe to call more than once: it only ever touches in-flight rows.
  */
 export function reapStaleJobs(): number {
   const REASON = 'Interrupted by server restart';
@@ -125,3 +124,18 @@ export function reapStaleJobsOnce(): void {
     console.warn(`[call-test] Recovered ${n} stale call(s) after restart -> failed, retryable.`);
   }
 }
+
+// Reap on first import of this module.
+//
+// This deliberately does NOT use Next's `instrumentation.ts` register() hook:
+// that file pulls better-sqlite3 into a bundle where `serverExternalPackages`
+// does not apply, so `next dev` fails to resolve `fs`. It is also silently
+// ignored if placed at the project root when a src/ dir exists — a mis-placed
+// file would disable crash recovery with no error at all.
+//
+// Importing this module is a strictly stronger trigger anyway: jobs are only
+// ever started from a route handler, and every route handler reaches the DB
+// through here. Module init runs before any handler body, so even the very
+// first `GET /api/calls` observes already-reaped state. The globalThis guard
+// makes it exactly once per process, before any worker can exist.
+reapStaleJobsOnce();

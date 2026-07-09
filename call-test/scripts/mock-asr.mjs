@@ -14,6 +14,8 @@
 import http from 'node:http';
 
 const PORT = Number(process.env.MOCK_ASR_PORT ?? 3399);
+/** Stall the response, to test crash-during-transcription recovery. */
+const DELAY_MS = Number(process.env.MOCK_ASR_DELAY_MS ?? 0);
 
 const CANNED = [
   [0.0, 4.1, 'Сайн байна уу, банкны зээлийн ажилтан ярьж байна.'],
@@ -41,9 +43,11 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ error: 'Only POST /v1/audio/transcriptions' }));
       return;
     }
-    console.log(`[mock-asr] ${req.method} ${req.url} -> 200`);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(body));
+    console.log(`[mock-asr] ${req.method} ${req.url} -> 200 (delay ${DELAY_MS}ms)`);
+    setTimeout(() => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(body));
+    }, DELAY_MS);
   });
 });
 
