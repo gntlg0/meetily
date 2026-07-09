@@ -1,0 +1,11 @@
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+
+# Runtime state: uploaded audio + the SQLite DB. Never commit call recordings.
+data/
+
+# Secrets
+.env.local
+.env*.local
